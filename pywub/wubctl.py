@@ -2,6 +2,14 @@ from enum import Enum
 import serial
 import time
 
+from . import commands
+
+cmd_dict = {}
+
+for command in commands.cmd_list:
+    method_name = "cmd_" + command.lower()
+    cmd_dict[method_name] = command
+    
 
 class wuBaseCtl():
     
