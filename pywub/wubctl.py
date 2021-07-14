@@ -66,8 +66,8 @@ class wuBaseCtl():
         self._autobaud = True
         return response
 
-    def set_baud(self, baudrate):
-        response = self.send_recv_ascii(f"BAUD {baudrate}")
+    def set_baud(self):
+        response = self.send_recv_ascii(f"BAUD {self.baudrate}")
         self._autobaud = False
         return response
 
