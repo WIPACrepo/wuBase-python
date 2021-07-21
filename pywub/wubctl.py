@@ -1,12 +1,16 @@
-from enum import Enum
+from enum import Enum, IntEnum
 import serial
+import sys
 import time
+import numpy as np
 
 from . import commands
 from collections import deque
 
-cmd_dict = {}
+# cmd_list = list(np.genfromtxt("commands.txt", dtype=str))
+# wubc = IntEnum('wubc', cmd_list)
 
+cmd_dict = {}
 for command in commands.cmd_list:
     method_name = "cmd_" + command.lower()
     cmd_dict[method_name] = command
@@ -19,12 +23,16 @@ class wuBaseCtl():
     
     def __init__(self, port, baudrate=1181818, mode="ascii", autobaud=True, timeout=0):
         
-
+        self._s = None
         self._port = port
         self._baudrate = baudrate
         self._autobaud=True
         self._verbose = False        
         self._timeout=timeout
+        
+        self._send_recv_running = False
+        
+        self.nbytes_recv = 0
         
         #FIXME: When we have a binary mode, support it. 
         if mode.lower() != "ascii":
@@ -35,8 +43,13 @@ class wuBaseCtl():
             self._s = serial.Serial(port, baudrate, timeout=self._timeout)
         except serial.SerialException: 
             print(f"Failed to open port \"{port}\"; exiting.")
-            #raise serial.SerialException("") 
-                        
+            sys.exit(1)
+            
+    def __del__(self):
+        if self._s is not None:
+            print("Shutting down serial connection.")
+            self._s.close()
+            
     def send(self, cmd):
         '''
         cmd: ascii command string
@@ -46,41 +59,47 @@ class wuBaseCtl():
         return self._s.write((cmd+"\n").encode('utf-8'))
     
     def recv(self):
+        '''
+        returns whatever bytes are waiting in the UART buffer. 
+        '''
         return self._s.read(self._s.in_waiting)
     
-    
-    
-    def send_recv_ascii(self, cmd):
+    def send_recv_ascii(self, cmd, datafile=None):
         '''
-        Send and receive an ASCII string. 
+        Send and receive data in ASCII mode. 
         
         cmd : command string
+        datafile : output datafile for writing 
+        
+        If datafile is not None, the "answer" string is not populated
+        and in stead the return strings are written to the file. 
 
         '''
-        #Define the delimeters
+
+        if self._verbose:
+            print(f"{cmd}")
+        
         answer = ""
+        command_response_error=False
+        nbytes_recv = 0
+        response_deq = deque(maxlen=3)
+        ok = "OK\n" 
+        
+        self._send_recv_running = True
         
         if self._autobaud: 
             cmd = "U" + cmd
-        if self._verbose:
-            print(f"{cmd}")
             
         self._s.write((cmd+"\n").encode('utf-8'))
-        
-        # define character sequence that denotes end of command response
-        # (error responses will be handled by timeout)    
-        command_response_error=False
 
-        nbytes_recv = 0
-        response_deq = deque(maxlen=3)
-        ok = "OK\n"
         tstart = time.time()
         #Wait for some return data to arrive. 
         while True:
             #blocking read of at least one byte:
             #if timeout, len(data) = 0
             data=self._s.read(self._s.in_waiting or 1).decode()
-            response_deq.extend([data[i] for i in range(len(data))])            
+            response_deq.extend([data[i] for i in range(len(data))])   
+            
             if self._verbose:
                 print(f"data: {data}")
                 print(f"data_deq: {response_deq}")
@@ -89,21 +108,27 @@ class wuBaseCtl():
                 if nbytes_recv == 0:
                 #check for ? at beginning of response
                     if data[0]=='?': 
-                        
                         command_response_error=True
                         
-                nbytes_recv += len(data)
-                answer += data
+                self.nbytes_recv += len(data)
+                if datafile is not None:
+                    datafile.write(data)
+                else:
+                    answer += data
             else: #Timeout 
                 if command_response_error == True: 
-                    raise InvalidCommandException(cmd)
+                    raise InvalidCommandException(f"{cmd}: {answer}")
                 elif "".join(response_deq) == ok: 
                     break
                 elif time.time() > tstart + self._timeout:
                     break
-        if self._verbose:
+                    
+                    
+        if self._verbose and len(answer) > 0:
             print(f"Total answer: {answer}")
-            
+        
+        self._send_recv_running = False
+        # Strip out the delimeter. 
         return answer.replace(ok, '').rstrip('\n')
 
     ##############
@@ -139,12 +164,16 @@ class wuBaseCtl():
         cmd = "GET_UID"
         answer = self.send_recv_ascii(cmd)
         return answer
+    
+    @property
+    def send_recv_running(self):
+        return self._send_recv_running
 
 def create_method(method_name, command):
-    def new_method(self, *args):
-#        full_command = " ".join([command] + list(args))
+    def new_method(self, *args, **kwargs):
+        datafile = kwargs.pop('datafile', None)
         full_command = " ".join([command] + [str(a) for a in args])
-        return self.send_recv_ascii(full_command)
+        return self.send_recv_ascii(full_command, datafile)
     new_method.__name__ = method_name
     setattr(wuBaseCtl, method_name, new_method)
 
