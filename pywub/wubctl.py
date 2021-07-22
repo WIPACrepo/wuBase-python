@@ -15,6 +15,7 @@ for command in commands.cmd_list:
     method_name = "cmd_" + command.lower()
     cmd_dict[method_name] = command
 
+    
 class InvalidCommandException(Exception):
     """Raised when an invalid command is sent to the wuBase."""
     pass
@@ -22,7 +23,6 @@ class InvalidCommandException(Exception):
 class wuBaseCtl():
     
     def __init__(self, port, baudrate=1181818, mode="ascii", autobaud=True, timeout=0):
-        
         self._s = None
         self._port = port
         self._baudrate = baudrate
@@ -46,7 +46,7 @@ class wuBaseCtl():
             sys.exit(1)
             
     def __del__(self):
-        if self._s is not None:
+        if self._s:
             print("Shutting down serial connection.")
             self._s.close()
             
@@ -111,10 +111,12 @@ class wuBaseCtl():
                         command_response_error=True
                         
                 self.nbytes_recv += len(data)
+                
                 if datafile is not None:
                     datafile.write(data)
                 else:
                     answer += data
+                    
             else: #Timeout 
                 if command_response_error == True: 
                     raise InvalidCommandException(f"{cmd}: {answer}")
@@ -128,12 +130,34 @@ class wuBaseCtl():
             print(f"Total answer: {answer}")
         
         self._send_recv_running = False
+        
         # Strip out the delimeter. 
         return answer.replace(ok, '').rstrip('\n')
 
     ##############
     
+    def batch_setup_commands(self, command_list, verbose=True):
+        '''
+        Run a batch of commands. 
+        Best for slow control as does not support file IO (yet).
+        '''
+        responses = []
+        for cmd in command_list:
+            cmd_list = cmd.split(' ')
+            name = cmd_list[0]
+            args = cmd_list[1:]
+            print(f"Command: {name}", *args)
+            result = getattr(self, f"cmd_{name}")(*args)
+            if result and verbose:
+                print(result)
+            responses += [result]
+            
+        return responses      
+    
     def set_verbosity(self, verbosity):
+        '''
+        Should probably just bite the bullet and use logging 
+        '''
         self._verbose = verbosity
     
     def enable_autobaud(self):

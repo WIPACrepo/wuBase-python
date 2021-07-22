@@ -27,20 +27,15 @@ def main(port, baudrate, npulses, outputfile):
         "flush_events", 
         "fpgatrig 0",    
         "fpgatrig 1",
-        "pulser_start 10",
+        f"pulser_start {npulses}",
     ]
 
-    #Execute slow control commands. 
-    for cmd in setup_commands:
-        cmd_list = cmd.split(' ')
-        name = cmd_list[0]
-        args = cmd_list[1:]
-        print(f"Command: {name}", *args)
-        result = getattr(wub, f"cmd_{name}")(*args)
-        if result:
-            print(result)
-            
-    datafile = open(outputfile, "w")
+    results = wub.batch_setup_commands(setup_commands, verbose=True)
+    
+    datafile = None
+    if outputfile:
+        datafile = open(outputfile, "w")
+    
 
     #Generate main data acquisition thread, run until the buffer is empty.  
     print(f"{time.ctime(time.time())}  Start run, {runtime} seconds", flush=True)
