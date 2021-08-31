@@ -28,6 +28,7 @@ class wuBaseCtl():
     
     def __init__(self, port, baudrate=1181818, mode="ascii", autobaud=True, timeout=0):
         
+        self._s = None
         self._port = port
         self._baudrate = baudrate
         self._autobaud=True
@@ -35,6 +36,7 @@ class wuBaseCtl():
         self._timeout=timeout
         
         self._send_recv_running = False
+        self._request_abort = False
         
         self.nbytes_recv = 0
         
@@ -45,15 +47,19 @@ class wuBaseCtl():
             
         try:
             self._s = serial.Serial(port, baudrate, timeout=self._timeout)
+            self._s.flushInput()
+            self._s.flushOutput()            
         except serial.SerialException: 
             logger.error(f"Failed to open port \"{port}\"; exiting.")
+            exit(1)
             #raise serial.SerialException("") 
             
         logger.info(f"Done creating {self.__class__.__name__} object on port {port} with baudrate {baudrate}.")
             
     def __del__(self):
-        logger.info("Shutting down serial connection.")
-        self._s.close()
+        if self._s:
+            logger.debug("Shutting down serial connection.")
+            self._s.close()
             
     def send(self, cmd):
         '''
@@ -138,6 +144,12 @@ class wuBaseCtl():
         
         # Strip out the delimeter. 
         return answer.replace(ok, '').rstrip('\n')
+    
+    def abort_batch(self):
+        '''
+        Abort batch readout.
+        '''
+        self._request_abort = True
 
     ##############
     

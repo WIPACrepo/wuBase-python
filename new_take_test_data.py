@@ -17,20 +17,20 @@ def main(port, baudrate, npulses, outputfile):
     logger.info(f"wuBase status: {wub.cmd_status()}")
 
     #Grabbed from Chris' code; will want to rework this. 
-    sleeptime = 0.1
-    runtime = 30
-
+    sleeptime = 0.0
+    runtime = 60
+    
     setup_commands = [
-        ["status", 0.1],
-        ["pulser_setup 20000 0.3", 0.1],
-        ["dac 1 2000", 0.1],
-        ["fpgaload", 0.1],         
-        ["adcconfig", 0.1],
-        ["fpgaload", 0.1],
-        ["flush_events", 0.1],
-        ["fpgatrig 0", 0.1],
-        ["fpgatrig 1", 0.1],
-        [f"pulser_start {npulses}", 0.1]
+        ["status", sleeptime],
+        ["pulser_setup 20000 0.3", sleeptime],
+        ["dac 1 2000", sleeptime],
+        ["fpgaload", sleeptime],         
+        ["adcconfig", sleeptime],
+        ["fpgaload", sleeptime],
+        ["flush_events", sleeptime],
+        ["fpgatrig 0", sleeptime],
+        ["fpgatrig 1", sleeptime],
+        [f"pulser_start {npulses}", sleeptime]
     ]
 
     results = wub.batch_setup_commands(setup_commands)
@@ -46,24 +46,33 @@ def main(port, baudrate, npulses, outputfile):
     rx_thread.start()
     
     tlast = time.time()
-    while True:
-        tnow = time.time()
-        if  tnow - tlast > 1: 
-            tlast = tnow
-            if not wub.send_recv_running:
-                print("send_recv not running.")
+    tstart = time.time()
+    try:
+        while True:
+            tnow = time.time()
+            if  tnow - tlast > 1: 
+                tlast = tnow
+                if not wub.send_recv_running:
+                    logger.info("End of batch data readout. Exiting.")
+                    break
+                logger.info(f"Progress: {wub.nbytes_recv:8.2e} bytes")
+            if tnow - tstart > runtime:
+                logger.error("DAQ has been running for longer than expected. Exiting.")
                 break
-            print(f"{time.ctime(time.time())}  Progress: {wub.nbytes_recv:8.2e} bytes", flush=True)
+    except KeyboardInterrupt: 
+        logger.warning("KeyboardInterrupt detected. Exiting batch readout.")
+        
+        
 
     # make sure the reception thread is really gone
     rx_thread.join(5)
     if rx_thread.is_alive():
-        print(f"{time.ctime(time.time())}  Error: rx thread failed to complete", flush=True)
+        logger.error(f"{time.ctime(time.time())}  Error: rx thread failed to complete")
 
     print(wub.cmd_status())    
     if datafile is not None: 
         datafile.close()
-    print("Exiting....")
+    logger.info("Exiting....")
     sys.exit(0)
     
 if __name__ == "__main__": 
@@ -71,10 +80,11 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Take wuBase Test Data")
     parser.add_argument("--port", type=str, required=True, help="UART port of wuBase")
-    parser.add_argument("--baud", type=str, default=115200, help="Baudrate to use during acquisition.")
+    parser.add_argument("--baud", type=int, default=115200, help="Baudrate to use during acquisition.")
     parser.add_argument("--ofile", type=str, default=None, help="Output file for test data.")
     parser.add_argument("--npulses", type=int, default=1000, help="Number of test pulses to send.")
-    parser.add_argument("--loglevel", type=str, default="DEBUG", help="Logger level")
+    parser.add_argument("--loglevel", type=str, default="INFO", help="Logger level")
+    parser.add_argument("--timeout", type=int, default=60, help="Runtime timeout. Run will abort if DAQ runs longer than this. timeout < 0 means no timeout. ")
     args = parser.parse_args()    
     
     numeric_level = getattr(logging, args.loglevel.upper(), None)
