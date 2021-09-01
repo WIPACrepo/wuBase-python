@@ -36,7 +36,12 @@ class wuBaseCtl():
         self._timeout=timeout
         
         self._send_recv_running = False
-        self._request_abort = False
+
+        self.request_abort = False
+        self.request_stop = False
+        
+        self._abort_requested = False
+        self._stop_requested = False
         
         self.nbytes_recv = 0
         
@@ -105,6 +110,18 @@ class wuBaseCtl():
         tstart = time.time()
         #Wait for some return data to arrive. 
         while True:
+            
+            if self.request_abort and not self._abort_requested:
+                logger.info("Abort requested.")
+                self._abort_requested = True
+                break
+            elif self.request_stop and not self._stop_requested:
+                logger.info("Stop requested.")
+                self._stop_requested = True
+                self._s.write(ok.encode('utf-8'))
+            
+            
+            
             #blocking read of at least one byte:
             #if timeout, len(data) = 0
             data=self._s.read(self._s.in_waiting or 1).decode()
@@ -124,7 +141,7 @@ class wuBaseCtl():
                 
                 if datafile is not None:
                     datafile.write(data)
-                else:
+                else: 
                     answer += data
                     
             else: #Timeout 
@@ -145,11 +162,7 @@ class wuBaseCtl():
         # Strip out the delimeter. 
         return answer.replace(ok, '').rstrip('\n')
     
-    def abort_batch(self):
-        '''
-        Abort batch readout.
-        '''
-        self._request_abort = True
+    
 
     ##############
     
