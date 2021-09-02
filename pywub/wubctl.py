@@ -4,6 +4,10 @@ import sys
 import time
 import numpy as np
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from . import commands
 from collections import deque
 
@@ -23,31 +27,43 @@ class InvalidCommandException(Exception):
 class wuBaseCtl():
     
     def __init__(self, port, baudrate=1181818, mode="ascii", autobaud=True, timeout=0):
+        
         self._s = None
         self._port = port
         self._baudrate = baudrate
         self._autobaud=True
-        self._verbose = False        
+        #self._verbose = False        
         self._timeout=timeout
         
         self._send_recv_running = False
+
+        self.request_abort = False
+        self.request_stop = False
+        
+        self._abort_requested = False
+        self._stop_requested = False
         
         self.nbytes_recv = 0
         
         #FIXME: When we have a binary mode, support it. 
         if mode.lower() != "ascii":
-            print(f"CTL mode \"{mode}\" not supported.")
-            print(f"Defaulting to ASCII.")
+            logger.warning(f"CTL mode \"{mode}\" not supported.")
+            logger.warning(f"Defaulting to ASCII.")
             
         try:
             self._s = serial.Serial(port, baudrate, timeout=self._timeout)
+            self._s.flushInput()
+            self._s.flushOutput()            
         except serial.SerialException: 
-            print(f"Failed to open port \"{port}\"; exiting.")
-            sys.exit(1)
+            logger.error(f"Failed to open port \"{port}\"; exiting.")
+            exit(1)
+            #raise serial.SerialException("") 
+            
+        logger.info(f"Done creating {self.__class__.__name__} object on port {port} with baudrate {baudrate}.")
             
     def __del__(self):
         if self._s:
-            print("Shutting down serial connection.")
+            logger.debug("Shutting down serial connection.")
             self._s.close()
             
     def send(self, cmd):
@@ -76,9 +92,8 @@ class wuBaseCtl():
 
         '''
 
-        if self._verbose:
-            print(f"{cmd}")
-        
+        logger.debug(f"{cmd}")
+    
         answer = ""
         command_response_error=False
         nbytes_recv = 0
@@ -95,15 +110,27 @@ class wuBaseCtl():
         tstart = time.time()
         #Wait for some return data to arrive. 
         while True:
+            
+            if self.request_abort and not self._abort_requested:
+                logger.info("Abort requested.")
+                self._abort_requested = True
+                break
+            elif self.request_stop and not self._stop_requested:
+                logger.info("Stop requested.")
+                self._stop_requested = True
+                self._s.write(ok.encode('utf-8'))
+            
+            
+            
             #blocking read of at least one byte:
             #if timeout, len(data) = 0
             data=self._s.read(self._s.in_waiting or 1).decode()
             response_deq.extend([data[i] for i in range(len(data))])   
             
-            if self._verbose:
-                print(f"data: {data}")
-                print(f"data_deq: {response_deq}")
-            
+#            if self._verbose:
+#            logger.debug(f"data: {data}")
+#            logger.debug(f"data_deq: {response_deq}")
+
             if len(data)>0:
                 if nbytes_recv == 0:
                 #check for ? at beginning of response
@@ -114,7 +141,7 @@ class wuBaseCtl():
                 
                 if datafile is not None:
                     datafile.write(data)
-                else:
+                else: 
                     answer += data
                     
             else: #Timeout 
@@ -126,39 +153,44 @@ class wuBaseCtl():
                     break
                     
                     
-        if self._verbose and len(answer) > 0:
-            print(f"Total answer: {answer}")
+        #if self._verbose and len(answer) > 0:
+        if len(answer) > 0: 
+            logger.debug(f"Response: {answer}")
         
         self._send_recv_running = False
         
         # Strip out the delimeter. 
         return answer.replace(ok, '').rstrip('\n')
+    
+    
 
     ##############
     
-    def batch_setup_commands(self, command_list, verbose=True):
+    def batch_setup_commands(self, command_list):
         '''
         Run a batch of commands. 
-        Best for slow control as does not support file IO (yet).
+        Best for slow control as it does not handle datafiles.
         '''
         responses = []
-        for cmd in command_list:
+        for cmd, delay in command_list:
             cmd_list = cmd.split(' ')
             name = cmd_list[0]
             args = cmd_list[1:]
-            print(f"Command: {name}", *args)
+            logger.info(f"Command: {cmd}")
             result = getattr(self, f"cmd_{name}")(*args)
-            if result and verbose:
-                print(result)
+            if result:
+                logger.info(str(result))
+                
+            time.sleep(delay)
             responses += [result]
             
         return responses      
     
-    def set_verbosity(self, verbosity):
-        '''
-        Should probably just bite the bullet and use logging 
-        '''
-        self._verbose = verbosity
+#     def set_verbosity(self, verbosity):
+#         '''
+#         Should probably just bite the bullet and use logging 
+#         '''
+#         self._verbose = verbosity
     
     def enable_autobaud(self):
         response = self.send_recv_ascii("BAUD -1")
