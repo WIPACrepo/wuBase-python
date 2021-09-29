@@ -1,0 +1,6 @@
+#Command format: 
+#SERVICE_ID #CMD_ID CMD_NAME #ARGS #RETURNARGS
+0 0 OK '' '' 
+0 1 GET_UID '' III
+0 2 STATUS '' ''
+0 3 BAUD I ''
