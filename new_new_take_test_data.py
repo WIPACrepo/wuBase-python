@@ -7,7 +7,8 @@ import logging
 
 logger = logging.getLogger()
 
-from pywub import control as wubctl
+import pywub
+from pywub import wubctl
 
 def main(args):
 
@@ -91,15 +92,23 @@ if __name__ == "__main__":
     
     import argparse
     parser = argparse.ArgumentParser(description="Take wuBase Test Data")
-    parser.add_argument("--port", type=str, required=True, help="UART port of wuBase")
-    parser.add_argument("--baud", type=int, default=115200, help="Baudrate to use during acquisition.")
-    parser.add_argument("--ofile", type=str, default=None, help="Output file for test data.")
-    parser.add_argument("--npulses", type=int, default=1000, help="Number of test pulses to send.")
-    parser.add_argument("--loglevel", type=str, default="INFO", help="Logger level")
-    parser.add_argument("--runtime", type=int, default=60, help="Run will end if DAQ runs longer than this. timeout < 0 means no timeout. ")
-    parser.add_argument("--sleeptime", type=float, default=0.001, help="Delay between command when executing batch commands.")    
-    args = parser.parse_args()    
-    #print(args)
+    parser.add_argument("--port", type=str, required=True, 
+                        help="UART port of wuBase")
+    parser.add_argument("--baud", type=int, default=115200, 
+                        help="Baudrate to use during acquisition.")
+    parser.add_argument("--ofile", type=str, default=None, 
+                        help="Output file for test data.")
+    parser.add_argument("--npulses", type=int, default=1000, 
+                        help="Number of test pulses to send.")
+    parser.add_argument("--loglevel", type=str, default="INFO",
+                        help="Logger level")
+    parser.add_argument("--runtime", type=int, default=60, 
+                        help="Run will end if DAQ runs longer than this. timeout < 0 means no timeout. ")
+    parser.add_argument("--config", type=str, default='config/cfg_test_data.cfg', 
+                        help="Delay between command when executing batch commands.")    
+    
+    
+    
     numeric_level = getattr(logging, args.loglevel.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % args.loglevel)
