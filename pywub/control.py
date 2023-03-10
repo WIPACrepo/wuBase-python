@@ -1,19 +1,24 @@
-from enum import Enum, IntEnum
+
+
+
 import serial
-import sys
+#import sys
 import time
 import numpy as np
 import struct
+from enum import Enum, IntEnum
+
+from collections import deque 
 
 import logging
-
 logger = logging.getLogger(__name__)
 
 from . import catalog
+from .catalog import ctlg as wubCMD_catalog
 
 wubCMD_entry = catalog.wubCMD_entry
    
-def parse_setup_config(filename):
+def parse_setup_config(filename:str):
 
     with open(filename, 'r') as f:
         config = f.read()
@@ -45,7 +50,7 @@ class InvalidCommandException(Exception):
 
 class wubCTL():
     
-    def __init__(self, port, baudrate=1181818, mode="binary", autobaud=True, timeout=1):
+    def __init__(self, port, baudrate=1181818, mode="ascii", autobaud=True, timeout=1):
         
         self._s = None
         self._port = port
@@ -58,21 +63,26 @@ class wubCTL():
         #wuBase operation mode
         self._mode = mode.upper()
         
+
+        self._batch_mode_running = False
         #DAQ settings (ASCII mode)
-        self._send_recv_running = False #ASCII send-recv 
+        #self._send_recv_running = False #ASCII send-recv 
         self.request_abort = False #Flag 
         self.request_stop = False
         self._abort_requested = False
         self._stop_requested = False
         
         #DAQ settings (BINARY mode)
-        self._batch_mode_running = False
         
+        
+        #Number or received bytes (both modes)
         self.nbytes_recv = 0
+
+        self.catalog = wubCMD_catalog
         
         if mode.lower() != "ascii" and mode.lower() != 'binary':
-            logger.error(f"CTL mode \"{mode}\" not supported.")
-            logger.error(f"Defaulting to ASCII.")
+            logger.warning(f"CTL mode \"{mode}\" not supported.")
+            logger.warning(f"Defaulting to ASCII.")
             self._mode = "ascii"
         else:
             self._mode = mode
@@ -86,31 +96,78 @@ class wubCTL():
             logger.error(f"Failed to open port \"{port}\"; exiting.")
             exit(1)
             #raise serial.SerialException("") 
-            
+
+           
         logger.info(f"Done creating {self.__class__.__name__} object on port {port} with baudrate {baudrate}.")
+        logger.info(f"Operations mode: {self._mode}")
+
+
+        def create_method(command:wubCMD_entry):
+            def new_method(self, *args, **kwargs):
+                return self.send_recv(command, *args)
+
+            name = f"cmd_{command.name.lower()}"
+            new_method.__name__ = name
+        
+            setattr(wubCTL, name, new_method)
+
+        logger.info(f"Generating {len(self.catalog.keys())} methods from catalog")
+        for cmd in self.catalog.keys():
+            create_method(self.catalog[cmd])
             
+
+
     def __del__(self):
         if self._s:
             logger.info("Shutting down serial connection.")
             self._s.close()
-            
+
+
+    @property
+    def autobaud(self):
+        return self._autobaud
+
     @property 
     def mode(self):
         return self._mode
+
+    @property 
+    def isascii(self):
+        if (self.mode.upper())[0] == 'A':
+            return True
+        else:
+            return False        
+        
+    @property
+    def batch_mode_running(self):
+        return self._batch_mode_running
     
     @property
     def byte_in_waiting(self):
         return self._s.in_waiting
     
-    def set_comms_mode(self, mode):
+    def set_comms_mode(self, mode:str):
         if (mode.upper())[0] == 'A':
+            self.cmd_asciimode()
             self._mode = 'ASCII'
         else:
+            self.cmd_binarymode()
             self._mode = 'BINARY'
-            
+
+    def set_baud(self, baud:int):
+        if baud < 1: 
+            ret = self.cmd_baud(-1)
+            self._autobaud = True
+        else:
+            ret = self.cmd_baud(baud)
+            self._autobaud = False
+
+        return ret
+    def set_autobaud(self):
+        return self.set_baud(-1)
         
             
-    def send(self, cmd):
+    def send(self, cmd:bytes) -> int:
         '''Sends a LF-terminated command. 
         
         Args: 
@@ -119,6 +176,8 @@ class wubCTL():
         Returns: 
             int: The number of bytes written. 
         '''
+        if self.autobaud:
+            self._s.write('U'.encode())
         return self._s.write(cmd)
         
     def recv(self, size:int = None) -> bytes:
@@ -133,7 +192,7 @@ class wubCTL():
         '''
         return self._s.read(size=self._s.in_waiting)
     
-    def read(self, size):
+    def read(self, size:int) -> bytes:
         '''Just simplifies reading from the serial port.
         
         '''
@@ -165,35 +224,37 @@ class wubCTL():
     
     def send_recv(self, command: wubCMD_entry, *args) -> dict:
         
-        if self._mode == 'ASCII':
-            
+        # logger.debug(f"COMMAND: {command}")
+        # logger.debug(f"ARGS: {args}")
+        
+        if self.isascii:
+            logger.debug("ASCII send_recv")
             deq = deque(['0','0','0'], maxlen=3)
             
-            wubctl.send(command.build('a'))
+            cmd = command.build(self.mode, *args)
+            logger.debug(f"Command string being sent: {cmd}")
+            self.send(cmd)
             recv_buf = []
             
-#             while not wubctl._s.in_waiting:
-#                 continue
-#             time.sleep(0.001) #For good measure, let more bytes trickle in.
-
             while("".join(deq) != 'OK\n'):
-                response = wubctl._s.read(size=wubctl._s.in_waiting)
+                response = self._s.read(size=self._s.in_waiting)
                 recv_buf += response
                 for i in response.decode():
                     deq.append(i)
-                
-            
-            if command == wubcmd.binarymode:
+           
+            if command == wubCMD_catalog.binarymode:
                 self._mode = "BINARY"
             
-            return dict(response=recv_buf.decode())
+            logger.debug(f"Command response bytes: {recv_buf}")
+            
+            return dict(response=bytes(recv_buf).decode())
             
         else:  
-            if command == wubcmd.send_batch:
+            if command == wubCMD_catalog.send_batch:
                 self._batch_mode_running = True
             rval = self.send_recv_binary(command, *args)
             
-            if command == wubcmd.asciimode:
+            if command == wubCMD_catalog.asciimode:
                 self._mode = "ASCII"
                 
             return rval
@@ -227,21 +288,93 @@ class wubCTL():
             readback = readback + readback2
         response = self.unpack_readback(command, readback)
         
-#         logger.debug("---------------")
-#         logger.debug(f"Readback: {readback}")
-#         logger.debug("---------------")
-# #         logger.debug("*** Decoded: ")
-# #         logger.debug(readback[0:-(cmd_return_args_size+1)].decode())
-#         logger.debug("*** Unpacked: ")
-# #        print(response)
-#         logger.debug(f"***\tCMD_RC: {wubCMD_RC(response['CMD_RC']).name}")
-#         logger.debug(f"***\tRetargs: {response['retargs']}")
-#         logger.debug("---------------")
+        logger.debug("---------------")
+        logger.debug(f"Readback: {readback}")
+        logger.debug("---------------")
+        logger.debug("*** Decoded: ")
+        logger.debug(readback[0:-(cmd_return_args_size+1)].decode())
+        logger.debug("*** Unpacked: ")
+        logger.debug(f"***\tCMD_RC: {wubCMD_RC(response['CMD_RC']).name}")
+        logger.debug(f"***\tRetargs: {response['retargs']}")
+        logger.debug("---------------")
         return response
 
 
 
-    def binary_batchmode_recv(self, datafile=None):
+    def ascii_batchmode_recv(self, ntosend, modenostop, datafile=None):
+        '''
+            ASCII batchmode receiver.
+        '''
+
+        logger.debug("Entering ASCII batchmode receiver.")
+        self._batch_mode_running = True
+        logger.info(f"Issuing batchmode send with ntosend={ntosend} and modenostop={modenostop}")
+        # Hard-code this bit to allow the while loop to execute.
+        self.send(f"send_batch {ntosend} {modenostop}\n".encode())
+
+        #resp = self.cmd_send_batch(ntosend, modenostop)['response']
+        #logger.info(f"{resp}")
+        nbytes_recv = 0
+        response_deq = deque(maxlen=3)
+
+        command_response_error=False
+        ok = "OK\n" 
+        answer = ""
+        data = ""
+
+        tstart = time.time()
+        #Wait for some return data to arrive. 
+        while True:
+            
+            if self.request_abort and not self._abort_requested:
+                #e.g. if we control+C'd out of the batch.
+                logger.info("Abort requested.")
+                self._abort_requested = True
+                break
+            elif self.request_stop and not self._stop_requested:
+                #Tell the wuBase to stop sending data. 
+                logger.info("Stop requested.")
+                self._stop_requested = True
+                self.cmd_ok()
+            
+            #blocking read of at least one byte:
+            #if timeout, len(data) = 0
+            data=self._s.read(self._s.in_waiting or 1).decode()
+            response_deq.extend([data[i] for i in range(len(data))])   
+            
+#            if self._verbose:
+            logger.debug(f"batchmode data: {data}")
+            logger.debug(f"batchmode data_deq: {response_deq}")
+
+            if len(data)>0:
+                # if nbytes_recv == 0:
+                # #check for ? at beginning of response to catch that an inva
+                #     if data[0]=='?': 
+                #         command_response_error=True
+                        
+                self.nbytes_recv += len(data)
+                
+                if datafile is not None:
+                    datafile.write(data)
+                else: 
+                    answer += data
+                    
+            else: #Timeout 
+                # if command_response_error == True: 
+                #     raise InvalidCommandException(f"{cmd}: {answer}")
+                if "".join(response_deq) == ok: 
+                    logger.debug("EOL detected")
+                    break
+                elif time.time() > tstart + self._timeout:
+                    break
+                    
+         
+        logger.info(f"Total number of bytes received:  {self.nbytes_recv}")
+
+        self._batch_mode_running = False        
+        return dict(response=answer)
+
+    def binary_batchmode_recv(self, ntosend, modenostop, datafile=None):
         '''
             Binary batchmode receiver.
         '''
@@ -303,3 +436,23 @@ class wubCTL():
         self._batch_mode_running = False
         
         return 0
+
+
+    def batchmode_recv(self, ntosend:int, modenostop:bool, datafile=None):
+        '''
+        Args: 
+            ntosend (int): how many to send, or negative to send all available
+            modenostop (bool): = 0: sending will stop when no more hits are available in
+                 * memory = 1: sending will not stop until count is satisfied, or a new command is
+                 * received; this means there can be pauses in the transmitted data while waiting
+                 * for events to be readied
+
+        
+        '''
+
+        modenostop = 1 if modenostop else 0
+
+        if self.isascii:
+            return self.ascii_batchmode_recv(ntosend, modenostop, datafile)
+        else:
+            return self.binary_batchmode_recv(ntosend, modenostop, datafile)

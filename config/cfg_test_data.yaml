@@ -1,6 +1,9 @@
 ---
 
 setup:
+    ok:
+        sleeptime: 0.1
+        args: ~
 
     status:
         sleeptime: 0.1

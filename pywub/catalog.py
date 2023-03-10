@@ -29,50 +29,6 @@ class wubCMD_RC(IntEnum):
     CMD_RC_BADCRC = auto()
     CMD_RC_INVALID_UNPACK = auto()
     
-class wubCMD_catalog():
-    
-    _return_codes = wubCMD_RC
-    
-    def __init__(self, cmd_list = []):
-        
-        #These are used as part of indexing.
-        self.name_dict = {}
-        self.id_dict = {}
-        self._dict = {}
-        self.command_names = []
-        # Doing it this way allows to index by command name or by index.
-        for cmd in cmd_list:
-            self.command_names += [cmd.name]
-            self.name_dict[cmd.name] = cmd
-            self.id_dict[cmd.cmd_id] = cmd
-            #Set command attributes: 
-            new_attr = cmd
-            new_attr.__name__ = cmd.name.lower()
-            setattr(self, new_attr.__name__ , new_attr)                
-            
-        self.reference = 'name'
-        self._dict = self.name_dict
-        
-    def set_reference(self, ref):
-        '''
-        Allows users to index commands by command name or command ID.
-        '''
-        ref = ref.lower()
-        if ref not in ['name', 'id']:
-            raise ValueError(f"{ref} not an acceptable target: name, id")
-        elif ref == 'name':
-            self._dict = self.name_dict
-            self.reference = 'name'
-        else:
-            self._dict = self.id_dict
-            self.reference = 'id'           
-            
-    def keys(self):
-        return self._dict.keys()
-                        
-    def __getitem__(self, key):
-        return self._dict[key]
-
 class wubCMD_entry():
     
     #Static variables. 
@@ -121,10 +77,11 @@ class wubCMD_entry():
             command_str = f"{self.name.upper()}"
             
             if self.args is not None:
-                for arg in self.args: 
-                    arg_str += f" {arg}"
-              
-            build = (command_str + arg_str).encode('utf-8')
+                for i, fmt in enumerate(self.args):
+#                    formatters = f" {{i}}"
+                    arg_str += f" {args[i]}"
+
+            build = (command_str + arg_str.format(*args)).encode('utf-8')
             
         else: #Binary
         
@@ -136,7 +93,52 @@ class wubCMD_entry():
         return build + bytes('\n', 'utf-8')
 
     
+class wubCMD_catalog():
     
+    _return_codes = wubCMD_RC
+    
+    def __init__(self, cmd_list = []):
+        
+        #These are used as part of indexing.
+        self.name_dict = {}
+        self.id_dict = {}
+        self._dict = {}
+        self.command_names = []
+        # Doing it this way allows to index by command name or by index.
+        for cmd in cmd_list:
+            self.command_names += [cmd.name]
+            self.name_dict[cmd.name] = cmd
+            self.id_dict[cmd.cmd_id] = cmd
+            #Set command attributes: 
+            new_attr = cmd
+            new_attr.__name__ = cmd.name.lower()
+            setattr(self, new_attr.__name__ , new_attr)                
+            
+        self.reference = 'name'
+        self._dict = self.name_dict
+
+    def get_command(self, name:wubCMD_entry):
+        return getattr(self, f"{name.lower()}")
+        
+    def set_reference(self, ref:str):
+        '''
+        Allows users to index commands by command name or command ID.
+        '''
+        ref = ref.lower()
+        if ref not in ['name', 'id']:
+            raise ValueError(f"{ref} not an acceptable target: name, id")
+        elif ref == 'name':
+            self._dict = self.name_dict
+            self.reference = 'name'
+        else:
+            self._dict = self.id_dict
+            self.reference = 'id'           
+            
+    def keys(self):
+        return self._dict.keys()
+                        
+    def __getitem__(self, key):
+        return self._dict[key]    
     
    
 #load command list.
@@ -159,3 +161,6 @@ ctlg = wubCMD_catalog(command_set)
 
 ctlg.set_reference('name')
 #wubcmd.keys() 
+
+
+
