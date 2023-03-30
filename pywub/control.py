@@ -7,41 +7,90 @@ import time
 import numpy as np
 import struct
 from enum import Enum, IntEnum
+from io import TextIOWrapper
+import yaml
 
 from collections import deque 
+
+from . import catalog
+from .catalog import ctlg as wubCMD_catalog
+from .catalog import wubCMD_RC
+
+wubCMD_entry = catalog.wubCMD_entry
 
 import logging
 logger = logging.getLogger(__name__)
 
-from . import catalog
-from .catalog import ctlg as wubCMD_catalog
+class CustomFormatter(logging.Formatter):
+    """Logging colored formatter, adapted from https://stackoverflow.com/a/56944256/3638629"""
 
-wubCMD_entry = catalog.wubCMD_entry
+    grey = '\x1b[38;21m'
+    green = '\x1b[38;5;82m'
+    blue = '\x1b[38;5;39m'
+    yellow = '\x1b[38;5;226m'
+    red = '\x1b[38;5;196m'
+    bold_red = '\x1b[31;1m'
+    reset = '\x1b[0m'
+
+    def __init__(self, fmt):
+        super().__init__()
+        self.fmt = fmt
+        self.FORMATS = {
+            logging.DEBUG: self.green + self.fmt + self.reset,
+            logging.INFO: self.blue + self.fmt + self.reset,
+            logging.WARNING: self.yellow + self.fmt + self.reset,
+            logging.ERROR: self.red + self.fmt + self.reset,
+            logging.CRITICAL: self.bold_red + self.fmt + self.reset
+        }
+
+    def format(self, record):
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+
    
-def parse_setup_config(filename:str):
+def parse_config(filename:str):
+    #YAML version
+    # config = {}
+    # with open(filename, 'r') as stream:
+    #     try:
+    #         # Converts yaml document to python object
+    #         config=yaml.safe_load(stream)
+
+    #     except yaml.YAMLError as e:
+    #         logger.error(f"Error parsing config file {filename}.")
+    #         raise yaml.YAMLError
+        
+    # logger.debug(f"Parsed config: {config}")
+    
+    # return config
 
     with open(filename, 'r') as f:
         config = f.read()
 
     setup_command_list = []
     for setting in config.split("\n"):
-        spl = setting.split(" ")
-        command = spl[0]
-        sleeptime = spl[1]
-        modified_command_args = None
-        if len(spl) > 2: 
-            command_args = spl[2::]
-            modified_command_args = []
-            for arg in command_args:
-                if arg.isnumeric():
-                    modified_command_args += [int(arg)]
-                else:
-                    modified_command_args += [float(arg)]
+        if setting[0] != '#':
+            spl = setting.split(" ")
+            command = spl[0]
+            sleeptime = spl[1]
+            modified_command_args = None
+            if len(spl) > 2: 
+                command_args = spl[2::]
+                modified_command_args = []
+                for arg in command_args:
+                    if arg.isnumeric():
+                        modified_command_args += [int(arg)]
+                    else:
+                        modified_command_args += [float(arg)]
 
-        cmd_line = dict(name=command, sleeptime=sleeptime, args=modified_command_args)
-        setup_command_list += [cmd_line]
+            cmd_line = dict(name=command, sleeptime=sleeptime, args=modified_command_args)
+            setup_command_list += [cmd_line]
+        else:
+            continue
         
-    return setup_command_list    
+    return dict(setup=setup_command_list)
 
     
 class InvalidCommandException(Exception):
@@ -65,12 +114,13 @@ class wubCTL():
         
 
         self._batch_mode_running = False
+        self.request_abort = False #Flag 
+        self.request_stop  = False
+        self._abort_requested = False
+        self._stop_requested = False        
         #DAQ settings (ASCII mode)
         #self._send_recv_running = False #ASCII send-recv 
-        self.request_abort = False #Flag 
-        self.request_stop = False
-        self._abort_requested = False
-        self._stop_requested = False
+
         
         #DAQ settings (BINARY mode)
         
@@ -301,19 +351,17 @@ class wubCTL():
 
 
 
-    def ascii_batchmode_recv(self, ntosend, modenostop, datafile=None):
+    def ascii_batchmode_recv(self, ntosend:int, modenostop:bool, datafile:TextIOWrapper=None) -> dict:
         '''
             ASCII batchmode receiver.
         '''
 
         logger.debug("Entering ASCII batchmode receiver.")
         self._batch_mode_running = True
-        logger.info(f"Issuing batchmode send with ntosend={ntosend} and modenostop={modenostop}")
+        logger.info(f"Issuing batchmode send with ntosend = {ntosend} and modenostop = {modenostop}")
         # Hard-code this bit to allow the while loop to execute.
         self.send(f"send_batch {ntosend} {modenostop}\n".encode())
 
-        #resp = self.cmd_send_batch(ntosend, modenostop)['response']
-        #logger.info(f"{resp}")
         nbytes_recv = 0
         response_deq = deque(maxlen=3)
 
@@ -325,17 +373,22 @@ class wubCTL():
         tstart = time.time()
         #Wait for some return data to arrive. 
         while True:
-            
+            logger.debug(f"request_abort : {self.request_abort}")
+            logger.debug(f"request_stop  : {self.request_stop}")
+
             if self.request_abort and not self._abort_requested:
                 #e.g. if we control+C'd out of the batch.
-                logger.info("Abort requested.")
+                logger.warning("Abort requested.")
                 self._abort_requested = True
                 break
             elif self.request_stop and not self._stop_requested:
                 #Tell the wuBase to stop sending data. 
-                logger.info("Stop requested.")
+                logger.warning("Stop requested.")
                 self._stop_requested = True
-                self.cmd_ok()
+                resp = self.cmd_ok()['response']
+                logger.debug(resp)
+                response_deq.extend([resp[i] for i in range(len(resp))])   
+                break
             
             #blocking read of at least one byte:
             #if timeout, len(data) = 0
@@ -359,22 +412,25 @@ class wubCTL():
                 else: 
                     answer += data
                     
-            else: #Timeout 
-                # if command_response_error == True: 
-                #     raise InvalidCommandException(f"{cmd}: {answer}")
+            else: #Socket timeout 
                 if "".join(response_deq) == ok: 
                     logger.debug("EOL detected")
                     break
                 elif time.time() > tstart + self._timeout:
-                    break
-                    
+                    logger.debug(f"Socket timeout detected.")
+                    #break
+
+            # if "".join(response_deq) == ok: 
+            #     logger.debug("EOL detected")
+            #     break
+                
          
         logger.info(f"Total number of bytes received:  {self.nbytes_recv}")
 
         self._batch_mode_running = False        
         return dict(response=answer)
 
-    def binary_batchmode_recv(self, ntosend, modenostop, datafile=None):
+    def binary_batchmode_recv(self, ntosend:int, modenostop:bool, datafile:TextIOWrapper=None) -> dict:
         '''
             Binary batchmode receiver.
         '''
@@ -438,7 +494,7 @@ class wubCTL():
         return 0
 
 
-    def batchmode_recv(self, ntosend:int, modenostop:bool, datafile=None):
+    def batchmode_recv(self, ntosend:int, modenostop:bool, datafile:TextIOWrapper=None) -> dict:
         '''
         Args: 
             ntosend (int): how many to send, or negative to send all available
