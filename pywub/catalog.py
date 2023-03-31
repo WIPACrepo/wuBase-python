@@ -28,6 +28,8 @@ class wubCMD_RC(IntEnum):
     CMD_RC_TIMEOUT = auto()
     CMD_RC_BADCRC = auto()
     CMD_RC_INVALID_UNPACK = auto()
+    CMD_RC_WAITING = auto()
+
     
 class wubCMD_entry():
     
@@ -69,7 +71,6 @@ class wubCMD_entry():
             bytes: formatted command object.
         
         '''
-        
         command_str = ''
         arg_str = ''
         build = None
@@ -78,16 +79,15 @@ class wubCMD_entry():
             
             if self.args is not None:
                 for i, fmt in enumerate(self.args):
-#                    formatters = f" {{i}}"
                     arg_str += f" {args[i]}"
 
             build = (command_str + arg_str.format(*args)).encode('utf-8')
             
         else: #Binary
-        
+            
             command_str = struct.pack(f"!HH", 0, self.cmd_id) 
             arg_str = struct.pack(f"!{self.args}", *args)
-            
+            print(self.args)
             build = command_str + arg_str 
             
         return build + bytes('\n', 'utf-8')
@@ -142,13 +142,11 @@ class wubCMD_catalog():
     
    
 #load command list.
-
 command_set = []
 command_names = []
 
 this_dir, this_filename = os.path.split(__file__)
 data_file = os.path.join(this_dir, "command_subset-csv.txt")
-
 
 with open(data_file , 'r') as f:
     for line in f.readlines():
@@ -160,7 +158,3 @@ with open(data_file , 'r') as f:
 ctlg = wubCMD_catalog(command_set)
 
 ctlg.set_reference('name')
-#wubcmd.keys() 
-
-
-

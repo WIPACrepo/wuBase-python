@@ -2,13 +2,14 @@
 
 
 import serial
-#import sys
+import sys
 import time
-import numpy as np
+#import numpy as np
 import struct
-from enum import Enum, IntEnum
+#from enum import Enum, IntEnum
 from io import TextIOWrapper
-import yaml
+#import yaml
+import threading
 
 from collections import deque 
 
@@ -33,7 +34,7 @@ class CustomFormatter(logging.Formatter):
     reset = '\x1b[0m'
 
     def __init__(self, fmt):
-        super().__init__()
+        super().__init__(datefmt="%Y-%m-%d %H:%M")
         self.fmt = fmt
         self.FORMATS = {
             logging.DEBUG: self.green + self.fmt + self.reset,
@@ -50,8 +51,15 @@ class CustomFormatter(logging.Formatter):
 
 
    
+
+
+    
+class InvalidCommandException(Exception):
+    """Raised when an invalid command is sent to the wuBase."""
+    pass
+
 def parse_config(filename:str):
-    #YAML version
+    #YAML version -- Does not work if you are executing multiple commands of the same type! 
     # config = {}
     # with open(filename, 'r') as stream:
     #     try:
@@ -90,12 +98,9 @@ def parse_config(filename:str):
         else:
             continue
         
-    return dict(setup=setup_command_list)
-
+    return dict(setup=setup_command_list)    
     
-class InvalidCommandException(Exception):
-    """Raised when an invalid command is sent to the wuBase."""
-    pass
+
 
 class wubCTL():
     
@@ -112,15 +117,12 @@ class wubCTL():
         #wuBase operation mode
         self._mode = mode.upper()
         
-
         self._batch_mode_running = False
         self.request_abort = False #Flag 
         self.request_stop  = False
         self._abort_requested = False
         self._stop_requested = False        
         #DAQ settings (ASCII mode)
-        #self._send_recv_running = False #ASCII send-recv 
-
         
         #DAQ settings (BINARY mode)
         
@@ -198,10 +200,10 @@ class wubCTL():
     
     def set_comms_mode(self, mode:str):
         if (mode.upper())[0] == 'A':
-            self.cmd_asciimode()
+            #self.cmd_asciimode()
             self._mode = 'ASCII'
         else:
-            self.cmd_binarymode()
+            #self.cmd_binarymode()
             self._mode = 'BINARY'
 
     def set_baud(self, baud:int):
@@ -213,6 +215,7 @@ class wubCTL():
             self._autobaud = False
 
         return ret
+    
     def set_autobaud(self):
         return self.set_baud(-1)
         
@@ -227,6 +230,7 @@ class wubCTL():
             int: The number of bytes written. 
         '''
         if self.autobaud:
+            #print("autobaud")
             self._s.write('U'.encode())
         return self._s.write(cmd)
         
@@ -272,45 +276,38 @@ class wubCTL():
         
         return dict(CMD_RC=cmd_return_code, retargs=retargs)
     
-    def send_recv(self, command: wubCMD_entry, *args) -> dict:
+               
+    def send_recv_ascii(self, command: wubCMD_entry, *args) -> dict:    
+        '''Send a ASCII-formatted command and return the response.
         
-        # logger.debug(f"COMMAND: {command}")
-        # logger.debug(f"ARGS: {args}")
+        Blocks until there is at least one byte in the readback buffer. 
         
-        if self.isascii:
-            logger.debug("ASCII send_recv")
-            deq = deque(['0','0','0'], maxlen=3)
-            
-            cmd = command.build(self.mode, *args)
-            logger.debug(f"Command string being sent: {cmd}")
-            self.send(cmd)
-            recv_buf = []
-            
-            while("".join(deq) != 'OK\n'):
-                response = self._s.read(size=self._s.in_waiting)
-                recv_buf += response
-                for i in response.decode():
-                    deq.append(i)
-           
-            if command == wubCMD_catalog.binarymode:
-                self._mode = "BINARY"
-            
-            logger.debug(f"Command response bytes: {recv_buf}")
-            
-            return dict(response=bytes(recv_buf).decode())
-            
-        else:  
-            if command == wubCMD_catalog.send_batch:
-                self._batch_mode_running = True
-            rval = self.send_recv_binary(command, *args)
-            
-            if command == wubCMD_catalog.asciimode:
-                self._mode = "ASCII"
-                
-            return rval
-                
+        Args:
+            command (wubCMD): wubCMD object. 
+            *args: Variable length argument list to pass along with command. 
         
+        '''
+        logger.debug("ASCII send_recv")
+        deq = deque(['0','0','0'], maxlen=3)
+            
+        cmd = command.build('a', *args)
+        logger.debug(f"Command string being sent: {cmd}")
+        self.send(cmd)
+        recv_buf = []
         
+        #FIXME: Add a timeout here.
+        while("".join(deq) != 'OK\n'):
+            response = self._s.read(size=self._s.in_waiting)
+            recv_buf += response
+            for i in response.decode():
+                deq.append(i)
+        
+        if command == wubCMD_catalog.binarymode:
+            self.set_comms_mode("BINARY")
+        
+        logger.debug(f"Command response bytes: {recv_buf}")
+        
+        return dict(response=bytes(recv_buf).decode())
     
     def send_recv_binary(self, command: wubCMD_entry, *args) -> dict:
         '''Send a binary-formatted command and return the response.
@@ -322,16 +319,14 @@ class wubCTL():
             *args: Variable length argument list to pass along with command. 
         
         '''
-        command_bytes = command.build(self.mode, *args)
+        command_bytes = command.build('b', *args)
         nsent = self.send(command_bytes)
         logger.debug(f"nsent: {nsent}\t len(command_bytes): {len(command_bytes)}")
         
         cmd_return_args_size = struct.calcsize(command.retargs)
-        #print(cmd_return_args_size)
         while self._s.in_waiting != cmd_return_args_size + 1:
             continue
             
-        #readback = self._s.read(size=self._s.in_waiting)
         readback = self._s.read(size=cmd_return_args_size + 1) #+1 for the CMD_RC
         if len(readback) != cmd_return_args_size + 1:
             readback2 = self._s.read(size=cmd_return_args_size + 1 - len(readback)) 
@@ -341,13 +336,34 @@ class wubCTL():
         logger.debug("---------------")
         logger.debug(f"Readback: {readback}")
         logger.debug("---------------")
-        logger.debug("*** Decoded: ")
-        logger.debug(readback[0:-(cmd_return_args_size+1)].decode())
+        # logger.debug("*** Decoded: ")
+        # logger.debug(readback[0:-(cmd_return_args_size+1)].decode())
         logger.debug("*** Unpacked: ")
         logger.debug(f"***\tCMD_RC: {wubCMD_RC(response['CMD_RC']).name}")
         logger.debug(f"***\tRetargs: {response['retargs']}")
         logger.debug("---------------")
-        return response
+
+        if command == wubCMD_catalog.asciimode:
+            self.set_comms_mode("ASCII")
+
+        return dict(response=response)
+    
+    def send_recv(self, command: wubCMD_entry, *args) -> dict:
+        
+       
+        if self.isascii:
+            return self.send_recv_ascii(command, *args)
+        else:  
+            if command == wubCMD_catalog.send_batch:
+                self._batch_mode_running = True
+            resp = self.send_recv_binary(command, *args)
+            
+            if command == wubCMD_catalog.asciimode:
+                self.set_comms_mode("ASCII")
+            if command == wubCMD_catalog.binarymode:
+                self.set_comms_mode("BINARY")
+
+            return resp    
 
 
 
@@ -435,13 +451,21 @@ class wubCTL():
             Binary batchmode receiver.
         '''
        
+        logger.debug("Entering BINARY batchmode reciever.")
         self._batch_mode_running = True
-
+        logger.info(f"Issuing batchmode send with ntosend = {ntosend} and modenostop = {modenostop}")
         nframes = 0
-        
+        #self.send(self.cmd_send_batch(ntosend, modenostop).build())
+        resp = self.cmd_send_batch(ntosend, modenostop)['response']
+        logger.info(f"***\tCMD_RC: {wubCMD_RC(resp['CMD_RC']).name}")
         tstart = time.time()
         #Wait for some return data to arrive. 
+        resp = wubCMD_RC.CMD_RC_WAITING
+
         while True:
+
+            logger.debug(f"request_abort : {self.request_abort}")
+            logger.debug(f"request_stop  : {self.request_stop}")            
             
             if self.request_abort and not self._abort_requested:
                 #e.g. if we control+C'd out of the batch.
@@ -450,12 +474,13 @@ class wubCTL():
                 break
             elif self.request_stop and not self._stop_requested:
                 #Tell the wuBase to stop sending data. 
-                logger.info("Stop requested.")
                 self._stop_requested = True
+                logger.info("Stop requested.")                
                 #FIXME: Add whatever binay command is required to stop transmission.
-#                 self._s.write(ok.encode('utf-8'))
-            
-            
+                resp = self.cmd_ok()['response']
+                resp_rc = resp['CMD_RC']
+                logger.info(wubCMD_RC(resp_rc).name)
+                break
             
             #blocking read of two bytes. 
             #This will be the total size of the 
@@ -464,14 +489,14 @@ class wubCTL():
             
             if len(data)>0:
                 nframes += 1
-                nsamples = struct.unpack("<H", data)
+                nsamples = struct.unpack("<H", data)[0]
                 payload_len_total = 2 + 6 + 8 + 4*nsamples
                 logger.info(f"Received frame; nsamples = {nsamples}")
                 
                 data = self.read(payload_len_total-2) #We've already read 2 bytes of the toal length. 
                 
                 if len(data) != payload_len_total - 2: #timeout?
-                    logger.error(f"readback was not the right length: {len(data)} vs {payload_len_total-2}")
+                    logger.error(f"Readback was not the right length: {len(data)} vs {payload_len_total-2}")
                     break
                 
                 
@@ -482,8 +507,11 @@ class wubCTL():
 #                 else: 
 #                     answer += data
                     
-            else: #Timeout 
+            else: #Socket timeout 
                 if time.time() > tstart + self._timeout:
+                    logger.debug(f"Socket timeout detected.")
+                elif resp['CMD_RC'] == wubCMD_RC.CMD_RC_OK:
+                    logger.debug("Received exit code from wuBase.")
                     break
                     
                 
@@ -512,3 +540,62 @@ class wubCTL():
             return self.ascii_batchmode_recv(ntosend, modenostop, datafile)
         else:
             return self.binary_batchmode_recv(ntosend, modenostop, datafile)
+        
+
+
+
+
+
+
+
+            # self.wubctl.send(f"BINARYMODE\n".encode())
+            # logger.debug("ASCII send_recv")
+            # deq = deque(['0','0','0'], maxlen=3)
+            
+            # recv_buf = []
+                
+            # while("".join(deq) != 'OK\n'):
+            #     response = wubctl._s.read(size=wubctl._s.in_waiting)
+            #     recv_buf += response
+                
+            #     for i in response.decode():
+            #         deq.append(i)
+
+            #     #print(deq)
+            # logger.debug(f"Command response bytes: {recv_buf}")
+            
+
+        # status = wubctl.cmd_status()
+        # logger.info(status)
+
+        # YAML version below. 
+        # for cmd in setup_command_dict.keys():
+        #     entry = setup_command_dict[cmd]
+        #     logger.debug(f"Executing command for entry '{cmd}'")
+        #     while True:
+        #         setup_cmd_name = str.upper(cmd)
+        #         setup_cmd_args = entry['args']
+        #         sleeptime = entry['sleeptime']
+        #         logger.info(f"COMMAND: {setup_cmd_name}")
+        #         logger.info(f"\tArgs: {setup_cmd_args}")            
+        #         logger.info(f"\tsleeptime: {sleeptime}")    
+
+        #         cmd = wubcmd_ctlg.get_command(setup_cmd_name)
+        #         response = None 
+        #         if setup_cmd_args is not None:
+        #             response = wubctl.send_recv(cmd, *setup_cmd_args)
+        #         else:
+        #             response = wubctl.send_recv(cmd)            
+
+        #         if wubctl.isascii:
+        #             logger.info(f"Command response:\n{response['response']}")
+        #             break
+        #         else:
+        #             continue 
+        #         break
+
+        #     logger.debug(f"Sleepiong for {entry['sleeptime']}")
+
+        #     time.sleep(float(entry['sleeptime']))
+        #     print("-----------------------------------------")           
+        # return         
