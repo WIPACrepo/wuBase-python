@@ -324,13 +324,19 @@ class wubCTL():
         logger.debug(f"nsent: {nsent}\t len(command_bytes): {len(command_bytes)}")
         
         cmd_return_args_size = struct.calcsize(command.retargs)
-        while self._s.in_waiting != cmd_return_args_size + 1:
-            continue
-            
+        #while self._s.in_waiting != cmd_return_args_size + 1:
+        #Wait for at least one byte (the return code).
+        # while not self._s.in_waiting:
+        #     continue
+
+        #FIXME: Need to catch case where insufficient bytes are transmitted. 
         readback = self._s.read(size=cmd_return_args_size + 1) #+1 for the CMD_RC
-        if len(readback) != cmd_return_args_size + 1:
-            readback2 = self._s.read(size=cmd_return_args_size + 1 - len(readback)) 
-            readback = readback + readback2
+        
+        
+        # if len(readback) != cmd_return_args_size + 1:
+        #     readback2 = self._s.read(size=cmd_return_args_size + 1 - len(readback)) 
+        #     readback = readback + readback2
+
         response = self.unpack_readback(command, readback)
         
         logger.debug("---------------")

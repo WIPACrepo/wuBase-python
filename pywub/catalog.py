@@ -87,10 +87,10 @@ class wubCMD_entry():
             
             command_str = struct.pack(f"!HH", 0, self.cmd_id) 
             arg_str = struct.pack(f"!{self.args}", *args)
-            print(self.args)
+            #print(self.args)
             build = command_str + arg_str 
             
-        return build + bytes('\n', 'utf-8')
+        return build + bytes('\r\n', 'utf-8')
 
     
 class wubCMD_catalog():
