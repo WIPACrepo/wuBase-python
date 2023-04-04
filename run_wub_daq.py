@@ -3,6 +3,7 @@
 import time
 import sys
 import threading
+import struct
 
 from pywub.control import wubCTL as wubCTL
 from pywub.control import parse_config
@@ -17,7 +18,7 @@ logger = logging.getLogger()
 
 from pywub.control import CustomFormatter
 
-def main(cli_args):
+def main(cli_args):   
 
     wubctl = wubCTL(cli_args.port, baudrate=cli_args.baud, 
                     mode=cli_args.commsmode, timeout=cli_args.timeout)
@@ -29,18 +30,18 @@ def main(cli_args):
     if not wubctl.isascii:
         logger.info("Sending BINARYMODE command to wuBase.")
         resp = wubctl.send_recv_ascii(wubCMD_catalog.binarymode)
-        logger.debug(resp)
+        logger.debug(f"Response: {resp['response']}")
 
 
     retries = 0
     error_detect = False
+    logger.info("Executing setup commands...")
     for setup_cmd in setup_commands:
         while True:
             setup_cmd_name = str.upper(setup_cmd['name'])
             setup_cmd_args = setup_cmd['args']
             sleeptime = setup_cmd['sleeptime']
-            logger.info(f"COMMAND: {setup_cmd_name}")
-            logger.info(f"Args: {setup_cmd_args}")
+            logger.info(f"COMMAND: {setup_cmd_name}\tArgs: {setup_cmd_args}")           
 
             cmd = wubCMD_catalog.get_command(setup_cmd_name)
             response = None
