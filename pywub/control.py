@@ -104,30 +104,32 @@ def parse_config(filename:str):
 
 class wubCTL():
     
-    def __init__(self, port, baudrate=1181818, mode="ascii", autobaud=True, timeout=1):
+    def __init__(self, port=None, baud=1181818, mode="ascii", autobaud=True, timeout=1, verbosity=False):
         
         self._s = None
         self._port = port
-        self._baudrate = baudrate
-        self._autobaud=True
+        self._baudrate = baud
+
         
-        #self._verbose = False        
         self._timeout=timeout
-        
-        #wuBase operation mode
-        self._mode = mode.upper()
-        
+      
+        #DAQ settings
         self._batch_mode_running = False
         self.request_abort = False #Flag 
         self.request_stop  = False
         self._abort_requested = False
         self._stop_requested = False        
+
+        #wuBase operation mode
+        self._autobaud=autobaud
+        self._mode = mode.upper()
+
         #DAQ settings (ASCII mode)
         
         #DAQ settings (BINARY mode)
+        self._binaryverbosity = verbosity        
         
-        
-        #Number or received bytes (both modes)
+        #Number or received bytes (b3oth modes)
         self.nbytes_recv = 0
 
         self.catalog = wubCMD_catalog
@@ -140,7 +142,7 @@ class wubCTL():
             self._mode = mode
             
         try:
-            self._s = serial.Serial(port, baudrate, timeout=self._timeout)
+            self._s = serial.Serial(self._port, self._baudrate, timeout=self._timeout)
             self._s.flushInput()
             self._s.flushOutput()
             
@@ -148,11 +150,6 @@ class wubCTL():
             logger.error(f"Failed to open port \"{port}\"; exiting.")
             exit(1)
             #raise serial.SerialException("") 
-
-           
-        logger.info(f"Done creating {self.__class__.__name__} object on port {port} with baudrate {baudrate}.")
-        logger.info(f"Operations mode: {self._mode}")
-
 
         def create_method(command:wubCMD_entry):
             def new_method(self, *args, **kwargs):
@@ -166,15 +163,23 @@ class wubCTL():
         logger.info(f"Generating {len(self.catalog.keys())} methods from catalog")
         for cmd in self.catalog.keys():
             create_method(self.catalog[cmd])
+
+        logger.info(f"Done creating {self.__class__.__name__} object on port {port} with baudrate {self._baudrate}.")
+        logger.info(f"Operations mode: {self._mode}")
             
 
 
     def __del__(self):
         if self._s:
+            if not self.isascii:
+                logger.info("Reverting to ASCII mode.")
+                self.cmd_asciimode()
             logger.info("Shutting down serial connection.")
             self._s.close()
 
-
+    @property
+    def binaryverbose(self):
+        return self._binaryverbosity
     @property
     def autobaud(self):
         return self._autobaud
@@ -244,7 +249,10 @@ class wubCTL():
             bytes: Whatever is waiting in the UART buffer.
             
         '''
-        return self._s.read(size=self._s.in_waiting)
+        if size is None: 
+            return self._s.read(size=self._s.in_waiting)
+        else:
+            return self._s.read(size=size)
     
     def read(self, size:int) -> bytes:
         '''Just simplifies reading from the serial port.
@@ -321,32 +329,49 @@ class wubCTL():
         '''
         command_bytes = command.build('b', *args)
         nsent = self.send(command_bytes)
-        logger.debug(f"nsent: {nsent}\t len(command_bytes): {len(command_bytes)}")
-        
+        #logger.debug(f"nsent: {nsent}\t len(command_bytes): {len(command_bytes)}")
+        #print(command_bytes)
         cmd_return_args_size = struct.calcsize(command.retargs)
         #while self._s.in_waiting != cmd_return_args_size + 1:
         #Wait for at least one byte (the return code).
-        # while not self._s.in_waiting:
-        #     continue
-
+    
         #FIXME: Need to catch case where insufficient bytes are transmitted. 
-        readback = self._s.read(size=cmd_return_args_size + 1) #+1 for the CMD_RC
-        
-        
-        # if len(readback) != cmd_return_args_size + 1:
-        #     readback2 = self._s.read(size=cmd_return_args_size + 1 - len(readback)) 
-        #     readback = readback + readback2
+        readback = None       
+        if self.binaryverbose:
+            time.sleep(0.5) #Ensure we have everything. 
 
-        response = self.unpack_readback(command, readback)
-        
+            readback = self._s.read(size=self._s.in_waiting)
+
+            logger.debug("Verbose mode bytes captured: ")
+            verbose_output = readback[0:-(cmd_return_args_size + 1)]
+            if(len(verbose_output) > 0):
+                logger.debug(verbose_output.decode())
+            else:
+                logger.debug("No verbose response.")
+
+            
+        else:
+            readback = self._s.read(size=cmd_return_args_size + 1) #+1 for the CMD_RC
+
+            #This is a lazy way to do this. 
+            if len(readback) != cmd_return_args_size + 1:
+                readback2 = self._s.read(size=cmd_return_args_size + 1 - len(readback)) 
+                readback = readback + readback2
+
+        response = self.unpack_readback(command, readback[-(cmd_return_args_size + 1)::])
+        #logger.debug(f"Command: {command.name}"
         logger.debug("---------------")
         logger.debug(f"Readback: {readback}")
         logger.debug("---------------")
         # logger.debug("*** Decoded: ")
         # logger.debug(readback[0:-(cmd_return_args_size+1)].decode())
         logger.debug("*** Unpacked: ")
-        logger.debug(f"***\tCMD_RC: {wubCMD_RC(response['CMD_RC']).name}")
-        logger.debug(f"***\tRetargs: {response['retargs']}")
+        try:
+            logger.debug(f"***\tCMD_RC: {wubCMD_RC(response['CMD_RC']).name}")
+            logger.debug(f"***\tRetargs: {response['retargs']}")
+        except ValueError:
+            logger.warning(f"*** Invalid RC code in response (likely due to verbosity)\n")
+            
         logger.debug("---------------")
 
         if command == wubCMD_catalog.asciimode:
@@ -354,22 +379,24 @@ class wubCTL():
 
         return dict(response=response)
     
-    def send_recv(self, command: wubCMD_entry, *args) -> dict:
-        
+    def send_recv(self, command: wubCMD_entry, *args) -> dict:       
        
         if self.isascii:
-            return self.send_recv_ascii(command, *args)
+            resp = self.send_recv_ascii(command, *args)
         else:  
             if command == wubCMD_catalog.send_batch:
                 self._batch_mode_running = True
             resp = self.send_recv_binary(command, *args)
-            
-            if command == wubCMD_catalog.asciimode:
-                self.set_comms_mode("ASCII")
-            if command == wubCMD_catalog.binarymode:
-                self.set_comms_mode("BINARY")
 
-            return resp    
+        #Catch special cases and set internal flags:             
+        if command == wubCMD_catalog.asciimode:
+            self.set_comms_mode("ASCII")
+        elif command == wubCMD_catalog.binarymode:
+            self.set_comms_mode("BINARY")
+        elif command == wubCMD_catalog.verbose:
+            self._binaryverbosity = args[0]
+
+        return resp    
 
 
 
@@ -463,7 +490,11 @@ class wubCTL():
         nframes = 0
         #self.send(self.cmd_send_batch(ntosend, modenostop).build())
         resp = self.cmd_send_batch(ntosend, modenostop)['response']
-        logger.info(f"***\tCMD_RC: {wubCMD_RC(resp['CMD_RC']).name}")
+        try:
+            logger.info(f"***\tCMD_RC: {wubCMD_RC(resp['CMD_RC']).name}")
+        except ValueError:
+            logger.warning(f"*** Invalid RC code in response (likely due to verbosity); full response: {resp}\n")
+
         tstart = time.time()
         #Wait for some return data to arrive. 
         resp = wubCMD_RC.CMD_RC_WAITING
@@ -491,24 +522,26 @@ class wubCTL():
             #blocking read of two bytes. 
             #This will be the total size of the 
             #if timeout, len(data) = 0
-            data=self.read(2)
+            nsamples_bin=self.read(2)
             
-            if len(data)>0:
+            if len(nsamples_bin)>0:
                 nframes += 1
-                nsamples = struct.unpack("<H", data)[0]
+                nsamples = struct.unpack("<H", nsamples_bin)[0]
                 payload_len_total = 2 + 6 + 8 + 4*nsamples
-                logger.info(f"Received frame; nsamples = {nsamples}")
+                logger.debug(f"Received frame; nsamples = {nsamples}")
                 
                 data = self.read(payload_len_total-2) #We've already read 2 bytes of the toal length. 
                 
                 if len(data) != payload_len_total - 2: #timeout?
                     logger.error(f"Readback was not the right length: {len(data)} vs {payload_len_total-2}")
+                    logger.error(data)
                     break
                 
                 
                 self.nbytes_recv += len(data)
                 
                 if datafile is not None:
+                    datafile.write(nsamples_bin)
                     datafile.write(data)
 #                 else: 
 #                     answer += data

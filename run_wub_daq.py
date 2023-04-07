@@ -20,9 +20,11 @@ from pywub.control import CustomFormatter
 
 def main(cli_args):   
 
-    wubctl = wubCTL(cli_args.port, baudrate=cli_args.baud, 
-                    mode=cli_args.commsmode, timeout=cli_args.timeout)
-
+    wubctl = wubCTL(cli_args.port, baud=cli_args.baud, 
+                    mode=cli_args.commsmode, timeout=cli_args.timeout, 
+                    verbosity=cli_args.verbose)
+    #wubctl = wubCTL(**cli_args.__dict__)
+    
     config = parse_config(cli_args.config)
     setup_commands = config['setup']
     
@@ -75,9 +77,12 @@ def main(cli_args):
     output_handler = None
     if cli_args.ofile is not None:
         logger.info(f"Opening {cli_args.ofile} for data logging.")
-        output_handler = open(cli_args.ofile, "w")
+        if wubctl.isascii:
+            output_handler = open(cli_args.ofile, "w")
+        else: 
+            output_handler = open(cli_args.ofile, "wb")
     # Now start the batchmode recieve thread. 
-    rx_thread=threading.Thread(target=wubctl.batchmode_recv, args=(cli_args.ntosend, 1), kwargs=dict(datafile=output_handler))
+    rx_thread=threading.Thread(target=wubctl.batchmode_recv, args=(cli_args.ntosend, 0), kwargs=dict(datafile=output_handler))
 
     rx_thread.start()
 
@@ -143,8 +148,10 @@ if __name__ == "__main__":
     
     parser.add_argument("--baud", type=int, default=115200, 
                         help="Baudrate to use during acquisition.")
+    
     parser.add_argument("--timeout", type=int, default=1, 
                         help="Socket-level timeout time to wait for a byte.")      
+    
     parser.add_argument("--runtime", type=int, default=5, 
                         help="Maximum runtime before aborting DAQ.")    
     
@@ -153,6 +160,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--commsmode", type=str, default='ascii',
                         help="Comms mode (ascii or binary)")
+    
+    parser.add_argument("--verbose", type=int, default=0,
+                        help="Binary mode comms verbosity.")
     
 #     parser.add_argument("--npulses", type=int, default=1000, 
 #                         help="Number of test pulses to send.")
@@ -209,7 +219,7 @@ if __name__ == "__main__":
     #logger.addHandler(ch)
 
 
-
+    
     main(cli_args)
     
 
