@@ -1,2 +1,2 @@
-from . import commands
-from . import wubctl 
+from . import catalog
+from . import control
