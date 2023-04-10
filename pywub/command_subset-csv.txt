@@ -33,7 +33,7 @@
 {"FPGATESTSPI",          SERV_SLOW_CTRL, CMD_FPGATESTSPI          , "III", ""},
 {"ADCCONFIG",            SERV_SLOW_CTRL, CMD_ADCCONFIG            , "", "BBBB"},
 {"DAC",                  SERV_SLOW_CTRL, CMD_DAC                  , "BH", ""},
-{"PULSER_SETUP",         SERV_SLOW_CTRL, CMD_PULSER_SETUP         , "dd", "dd"},
+{"PULSER_SETUP",         SERV_SLOW_CTRL, CMD_PULSER_SETUP         , "Bdd", "Bdd"},
 {"PULSER_START",         SERV_SLOW_CTRL, CMD_PULSER_START         , "I", ""},
 {"PWMFREQ",              SERV_SLOW_CTRL, CMD_PWMFREQ              , "I", ""},
 {"PWMDELTA",             SERV_SLOW_CTRL, CMD_PWMDELTA             , "I", ""},
