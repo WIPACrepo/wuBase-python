@@ -31,7 +31,7 @@
 {"FPGAPRINTEVENTS",      SERV_SLOW_CTRL, CMD_FPGAPRINTEVENTS      , "", ""},
 {"FPGASYNCREPORT",       SERV_SLOW_CTRL, CMD_FPGASYNCREPORT       , "", ""},
 {"FPGATESTSPI",          SERV_SLOW_CTRL, CMD_FPGATESTSPI          , "III", ""},
-{"ADCCONFIG",            SERV_SLOW_CTRL, CMD_ADCCONFIG            , "", "BBBB"},
+{"ADCCONFIG",            SERV_SLOW_CTRL, CMD_ADCCONFIG            , "", ""},
 {"DAC",                  SERV_SLOW_CTRL, CMD_DAC                  , "BH", ""},
 {"PULSER_SETUP",         SERV_SLOW_CTRL, CMD_PULSER_SETUP         , "Bdd", "Bdd"},
 {"PULSER_START",         SERV_SLOW_CTRL, CMD_PULSER_START         , "I", ""},
