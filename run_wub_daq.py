@@ -48,6 +48,8 @@ def main(cli_args):
             cmd = wubCMD_catalog.get_command(setup_cmd_name)
             response = None
 
+            time.sleep(float(sleeptime))
+
             if setup_cmd_args is not None:
                 response = wubctl.send_recv(cmd, *setup_cmd_args)
             else:
@@ -71,7 +73,7 @@ def main(cli_args):
                         break
                     retries+=1
 
-        time.sleep(float(sleeptime))
+        
         print("-----------------------------------------")    
     
     output_handler = None
@@ -82,7 +84,7 @@ def main(cli_args):
         else: 
             output_handler = open(cli_args.ofile, "wb")
     # Now start the batchmode recieve thread. 
-    rx_thread=threading.Thread(target=wubctl.batchmode_recv, args=(cli_args.ntosend, 0), kwargs=dict(datafile=output_handler))
+    rx_thread=threading.Thread(target=wubctl.batchmode_recv, args=(cli_args.ntosend, 1), kwargs=dict(datafile=output_handler))
 
     rx_thread.start()
 

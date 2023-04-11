@@ -2,11 +2,15 @@
 
 Python driver for interacting with a wuBase.
 
+## Instantiation 
+
+Begin by installing the required Python packages: 
+
+```
+pip install -r requirements.txt
+```
+
 ## Usage
-
-### Instantiation 
-
-
 
 wubctl.py contains the main driver; instantiate it using
 
@@ -29,14 +33,10 @@ Each method is defined as `cmd_<ascii_command>`, e.g. `cmd_status()`, `cmd_getui
 
 Arguments can be passed to commands as strings or numbers:
 
-`wub.cmd_pulser_setup("2000", "0.3")`
-`wub.cmd_pulser_setup(2000, 0.3)`
-
-If you want to capture the output of commands to a file (rather than return a string with the response) you can pass any command the keyword argument `datafile=foo` where `foo` is an open file handler. 
-This is particularly useful for `cmd_send_batch()` where the number of returned data may be arbitrarily large. 
-
+`wub.cmd_pulser_setup("1", "2000", "0.3")`
+`wub.cmd_pulser_setup(1, 2000, 0.3)`
 
 
 ## Known Issues
 
-The code to capture wuBase responses is a little bit janky.
+Aborting a run in BINARY comms mode can be wonky if there are data in the buffer. As a result, the last frame captured may be incorrect. 
