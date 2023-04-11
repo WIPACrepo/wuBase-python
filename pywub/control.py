@@ -129,8 +129,9 @@ class wubCTL():
         #DAQ settings (BINARY mode)
         self._binaryverbosity = verbosity        
         
-        #Number or received bytes (b3oth modes)
+        #Number or received bytes (both modes)
         self.nbytes_recv = 0
+        self.nframes_binary = 0
 
         self.catalog = wubCMD_catalog
         
@@ -330,7 +331,7 @@ class wubCTL():
         command_bytes = command.build('b', *args)
         nsent = self.send(command_bytes)
         #logger.debug(f"nsent: {nsent}\t len(command_bytes): {len(command_bytes)}")
-        #print(command_bytes)
+        #print([f"{b:x}" for b in command_bytes])
         cmd_return_args_size = struct.calcsize(command.retargs)
         #while self._s.in_waiting != cmd_return_args_size + 1:
         #Wait for at least one byte (the return code).
@@ -395,8 +396,16 @@ class wubCTL():
             self.set_comms_mode("BINARY")
         elif command == wubCMD_catalog.verbose:
             self._binaryverbosity = args[0]
+        elif command == wubCMD_catalog.baud:
+            if args[0] == -1:
+                self._autobaud = True
+                self._s.baudrate = self._baudrate
+            else:
+                self._autobaud = False
+                self._s.baudrate = args[0]
+                self._baudrate = args[0]
 
-        return resp    
+        return resp
 
 
 
@@ -478,6 +487,15 @@ class wubCTL():
 
         self._batch_mode_running = False        
         return dict(response=answer)
+    
+    def stop_batch(self):
+
+        self.send(wubCMD_catalog.ok.build('b'))
+        time.sleep(0.5) #Wait long enough for the most recent frame to be done.,
+        resp = self._s.read(self._s.in_waiting or 1)
+        resp_rc = resp[-1]             
+        logger.debug(f"Stop return bytes: {resp}")
+        logger.info(wubCMD_RC(resp_rc).name)
 
     def binary_batchmode_recv(self, ntosend:int, modenostop:bool, datafile:TextIOWrapper=None) -> dict:
         '''
@@ -486,9 +504,10 @@ class wubCTL():
        
         logger.debug("Entering BINARY batchmode reciever.")
         self._batch_mode_running = True
+        self.nframes_binary = 0
         logger.info(f"Issuing batchmode send with ntosend = {ntosend} and modenostop = {modenostop}")
-        nframes = 0
-        #self.send(self.cmd_send_batch(ntosend, modenostop).build())
+        self.nframes_binary = 0
+        
         resp = self.cmd_send_batch(ntosend, modenostop)['response']
         try:
             logger.info(f"***\tCMD_RC: {wubCMD_RC(resp['CMD_RC']).name}")
@@ -501,22 +520,20 @@ class wubCTL():
 
         while True:
 
-            logger.debug(f"request_abort : {self.request_abort}")
-            logger.debug(f"request_stop  : {self.request_stop}")            
+            # logger.debug(f"request_abort : {self.request_abort}")
+            # logger.debug(f"request_stop  : {self.request_stop}")            
             
             if self.request_abort and not self._abort_requested:
                 #e.g. if we control+C'd out of the batch.
-                logger.info("Abort requested.")
+                logger.info("Abort requested. This may leave the wuBase in a weird state.")
                 self._abort_requested = True
+                self.stop_batch()
                 break
             elif self.request_stop and not self._stop_requested:
                 #Tell the wuBase to stop sending data. 
                 self._stop_requested = True
                 logger.info("Stop requested.")                
-                #FIXME: Add whatever binay command is required to stop transmission.
-                resp = self.cmd_ok()['response']
-                resp_rc = resp['CMD_RC']
-                logger.info(wubCMD_RC(resp_rc).name)
+                self.stop_batch()
                 break
             
             #blocking read of two bytes. 
@@ -525,20 +542,23 @@ class wubCTL():
             nsamples_bin=self.read(2)
             
             if len(nsamples_bin)>0:
-                nframes += 1
+                bt = [f"{i:x}" for i in nsamples_bin]
+                logger.debug(f"nsamples_bin: {bt}")
+                self.nframes_binary += 1
                 nsamples = struct.unpack("<H", nsamples_bin)[0]
                 payload_len_total = 2 + 6 + 8 + 4*nsamples
-                logger.debug(f"Received frame; nsamples = {nsamples}")
+                logger.debug(f"Received frame {self.nframes_binary}; nsamples = {nsamples}")
                 
                 data = self.read(payload_len_total-2) #We've already read 2 bytes of the toal length. 
                 
                 if len(data) != payload_len_total - 2: #timeout?
                     logger.error(f"Readback was not the right length: {len(data)} vs {payload_len_total-2}")
+                    logger.error(f"nsamples_bytes: {bt}\t ")
                     logger.error(data)
                     break
                 
                 
-                self.nbytes_recv += len(data)
+                self.nbytes_recv += len(data) + 2
                 
                 if datafile is not None:
                     datafile.write(nsamples_bin)
@@ -554,7 +574,7 @@ class wubCTL():
                     break
                     
                 
-        logger.info(f"Total number of frames received: {nframes}")
+        logger.info(f"Total number of frames received: {self.nframes_binary}")
         logger.info(f"Total number of bytes received:  {self.nbytes_recv}")
         self._batch_mode_running = False
         

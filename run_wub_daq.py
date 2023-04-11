@@ -75,7 +75,7 @@ def main(cli_args):
 
         
         print("-----------------------------------------")    
-    
+
     output_handler = None
     if cli_args.ofile is not None:
         logger.info(f"Opening {cli_args.ofile} for data logging.")
@@ -100,7 +100,12 @@ def main(cli_args):
                 if not wubctl._batch_mode_running:
                     logger.info("End of batch data readout. Exiting.")
                     break
-                logger.info(f"Progress: {wubctl.nbytes_recv:8.2e} bytes")
+
+                if wubctl.isascii:
+                    info_str = f"Progress: {wubctl.nbytes_recv:8.2e} bytes"
+                else:
+                    info_str = f"Progress: {wubctl.nframes_binary} frames ({wubctl.nbytes_recv:8.2e} bytes)"
+                logger.info(info_str)
             if maxruntime > 0 and tnow - tstart > maxruntime:
                 logger.info("DAQ runtime exceeded... Exiting.")
                 wubctl.request_stop = True          
@@ -121,7 +126,8 @@ def main(cli_args):
         logger.info("Sending ASCIIMODE command to wuBase.")        
         #logger.debug(wubctl.cmd_ok())
         resp = wubctl.cmd_asciimode()
-        logger.info(resp['response'])
+        rc = wubCMD_RC(resp['response']['CMD_RC']).name
+        logger.info(rc)
         
 
     logger.info("Re-enabling autobaud.")    
