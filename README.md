@@ -9,8 +9,11 @@ Begin by installing the required Python packages:
 ```
 pip install -r requirements.txt
 ```
+## Data Acquisition
 
-## Usage
+`run_wub_daq.py` is your go-to script (use the `--help` flag for information). It takes a configuration file (example given in `config/cfg_test_data.cfg`) which is a list of commands to execute before entering the batchmode reciever thread. 
+
+## More Involved Usage
 
 wubctl.py contains the main driver; instantiate it using
 
@@ -19,11 +22,7 @@ from pywub import wubctl
 wub = wubctl.wuBaseCtl(device_port, baudrate)
 ```
 
-The wuBase will operate in autobaud mode untill commanded not to using 
-
-`wub.set_baud()` 
-
-which will set the baudrate on the wuBase to that of the serial port when the `wuBaseCtl` object was instantiated. 
+Note the wuBase will operate in autobaud mode until told otherwise. This is handled seamlessly in the main DAQ script. 
 
 ### Commanding
 
@@ -37,6 +36,6 @@ Arguments can be passed to commands as strings or numbers:
 `wub.cmd_pulser_setup(1, 2000, 0.3)`
 
 
-## Known Issues
+### Known Issues
 
 Aborting a run in BINARY comms mode can be wonky if there are data in the buffer. As a result, the last frame captured may be incorrect. 
