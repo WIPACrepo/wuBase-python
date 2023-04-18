@@ -146,7 +146,7 @@ command_set = []
 command_names = []
 
 this_dir, this_filename = os.path.split(__file__)
-data_file = os.path.join(this_dir, "command_subset-csv.txt")
+data_file = os.path.join(this_dir, "wubase_commands.txt")
 
 with open(data_file , 'r') as f:
     for line in f.readlines():
