@@ -48,3 +48,4 @@
 {"DEBUG",                SERV_SLOW_CTRL, CMD_DEBUG                , "", ""},
 {"TEST_DOUBLE",          SERV_SLOW_CTRL, CMD_TEST_DOUBLE          , "d", "d"},
 {"VERBOSE",              SERV_SLOW_CTRL, CMD_VERBOSE              , "B", ""},
+{"BINARY_STATS",         SERV_SLOW_CTRL, CMD_BINARY_STATS         , "", "II"},

@@ -1,4 +1,4 @@
-from enum import Enum, IntEnum, auto
+from enum import IntEnum, auto
 import struct
 import os
 

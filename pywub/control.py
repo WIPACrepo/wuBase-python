@@ -11,6 +11,7 @@ from io import TextIOWrapper
 #import yaml
 import threading
 
+from . import parser as parser
 from collections import deque 
 
 from . import catalog
@@ -21,6 +22,8 @@ wubCMD_entry = catalog.wubCMD_entry
 
 import logging
 logger = logging.getLogger(__name__)
+
+
 
 class CustomFormatter(logging.Formatter):
     """Logging colored formatter, adapted from https://stackoverflow.com/a/56944256/3638629"""
@@ -201,7 +204,7 @@ class wubCTL():
         return self._batch_mode_running
     
     @property
-    def byte_in_waiting(self):
+    def bytes_in_waiting(self):
         return self._s.in_waiting
     
     def set_comms_mode(self, mode:str):
@@ -256,10 +259,12 @@ class wubCTL():
             return self._s.read(size=size)
     
     def read(self, size:int) -> bytes:
-        '''Just simplifies reading from the serial port.
+        '''Just simplifies reading from the serial port. 
         
         '''
-        return self._s.read(size=size)
+        data = self._s.read(size=size)
+        #self.nbytes_recv += len(data)
+        return data
 
     def unpack_readback(self, command: wubCMD_entry, readback: bytes) -> dict:
         '''Unpack a readback object per the command that issued it.
@@ -355,6 +360,7 @@ class wubCTL():
             readback = self._s.read(size=cmd_return_args_size + 1) #+1 for the CMD_RC
 
             #This is a lazy way to do this. 
+            # FIXME: make this a for loop, try it a few times, and throw an error if it fails
             if len(readback) != cmd_return_args_size + 1:
                 readback2 = self._s.read(size=cmd_return_args_size + 1 - len(readback)) 
                 readback = readback + readback2
@@ -488,14 +494,15 @@ class wubCTL():
         self._batch_mode_running = False        
         return dict(response=answer)
     
-    def stop_batch(self):
+    def binary_stop_batch(self):
 
         self.send(wubCMD_catalog.ok.build('b'))
         time.sleep(0.5) #Wait long enough for the most recent frame to be done.,
-        resp = self._s.read(self._s.in_waiting or 1)
+        resp = self.read(self._s.in_waiting or 1)
         resp_rc = resp[-1]             
         logger.debug(f"Stop return bytes: {resp}")
         logger.info(wubCMD_RC(resp_rc).name)
+
 
     def binary_batchmode_recv(self, ntosend:int, modenostop:bool, datafile:TextIOWrapper=None) -> dict:
         '''
@@ -516,59 +523,152 @@ class wubCTL():
 
         tstart = time.time()
         #Wait for some return data to arrive. 
-        resp = wubCMD_RC.CMD_RC_WAITING
-
+        resp['CMD_RC'] = wubCMD_RC.CMD_RC_WAITING
+        self.nbytes_recv = 0
         while True:
-
-            # logger.debug(f"request_abort : {self.request_abort}")
-            # logger.debug(f"request_stop  : {self.request_stop}")            
             
             if self.request_abort and not self._abort_requested:
                 #e.g. if we control+C'd out of the batch.
                 logger.info("Abort requested. This may leave the wuBase in a weird state.")
                 self._abort_requested = True
-                self.stop_batch()
+                self.binary_stop_batch()
                 break
             elif self.request_stop and not self._stop_requested:
                 #Tell the wuBase to stop sending data. 
                 self._stop_requested = True
                 logger.info("Stop requested.")                
-                self.stop_batch()
+                self.binary_stop_batch()
                 break
             
             #blocking read of two bytes. 
             #This will be the total size of the 
-            #if timeout, len(data) = 0
-            nsamples_bin=self.read(2)
+            #if timeout, len(data) != nstartwords_remaining, or 0 if nothing recieved.
+            data=self.read(self.bytes_in_waiting or 1)
+            self.nbytes_recv += len(data)
+            if datafile is not None:
+                datafile.write(data)
+
+            else: #Socket timeout 
+                if time.time() > tstart + self._timeout:
+                    logger.debug(f"Readout timeout detected.")
+                elif resp['CMD_RC'] == wubCMD_RC.CMD_RC_OK:
+                    logger.debug("Received exit code from wuBase.")
+                    break
+                    
+                
+        #logger.info(f"Total number of frames received: {self.nframes_binary}")
+        logger.info(f"Total number of bytes received:  {self.nbytes_recv}")
+        self._batch_mode_running = False
+        
+        self._s.flushInput()
+        self._s.flushOutput()
+
+        return 0        
+
+    def binary_batchmode_recv(self, ntosend:int, modenostop:bool, datafile:TextIOWrapper=None) -> dict:
+        '''
+            Binary batchmode receiver.
+        '''
+       
+        logger.debug("Entering BINARY batchmode reciever.")
+        self._batch_mode_running = True
+        self.nframes_binary = 0
+        logger.info(f"Issuing batchmode send with ntosend = {ntosend} and modenostop = {modenostop}")
+        self.nframes_binary = 0
+        
+        resp = self.cmd_send_batch(ntosend, modenostop)['response']
+        try:
+            logger.info(f"***\tCMD_RC: {wubCMD_RC(resp['CMD_RC']).name}")
+        except ValueError:
+            logger.warning(f"*** Invalid RC code in response (likely due to verbosity); full response: {resp}\n")
+
+        tstart = time.time()
+        #Wait for some return data to arrive. 
+        resp['CMD_RC'] = wubCMD_RC.CMD_RC_WAITING
+         
+        start_word = []
+        start_bytes = []
+        nstartwords_remaining = 2
+        while True:
+           
+            if self.request_abort and not self._abort_requested:
+                #e.g. if we control+C'd out of the batch.
+                logger.info("Abort requested. This may leave the wuBase in a weird state.")
+                self._abort_requested = True
+                self.binary_stop_batch()
+                break
+            elif self.request_stop and not self._stop_requested:
+                #Tell the wuBase to stop sending data. 
+                self._stop_requested = True
+                logger.info("Stop requested.")                
+                self.binary_stop_batch()
+                break
             
-            if len(nsamples_bin)>0:
-                bt = [f"{i:x}" for i in nsamples_bin]
-                logger.debug(f"nsamples_bin: {bt}")
+
+            #if(self.bytes_in_waiting > 2):
+            #blocking read of two bytes. 
+            #This will be the total size of the 
+            #if timeout, len(data) != nstartwords_remaining, or 0 if nothing recieved.
+
+            # logger.debug(f"pre-read in_waiting: {self.bytes_in_waiting}")
+            start_bytes=self.read(nstartwords_remaining)
+            # logger.debug(f"Start bytes: {start_bytes}")
+
+            if len(start_bytes) == 2:
+                start_word = start_bytes
+            elif len(start_bytes)==1:
+                # logger.debug("Recieved partial start word.")
+                start_word += [start_bytes[0]]
+                nstartwords_remaining-=1
+                continue
+            
+            if len(start_word)==2:
+                
+                bt = [f"{i:x}" for i in start_word]
+                logger.debug(f"nsamples hex values: {bt}")
                 self.nframes_binary += 1
-                nsamples = struct.unpack("<H", nsamples_bin)[0]
-                payload_len_total = 2 + 6 + 8 + 4*nsamples
-                logger.debug(f"Received frame {self.nframes_binary}; nsamples = {nsamples}")
-                
+                nsamples = struct.unpack("<H", start_word)[0]
+                # Payload total = 
+                # n_samples + fpga_timestamp (48 bits) + fpga_tdcword (64 bits) + adc_data (16 bits per sample)
+                payload_len_total = parser.calc_frame_size(nsamples)
+
+                logger.debug(f"nsamples = {nsamples}; payload_length = {payload_len_total}")              
+                logger.debug(f"self.bytes_in_waiting: {self.bytes_in_waiting}")
                 data = self.read(payload_len_total-2) #We've already read 2 bytes of the toal length. 
-                
+             
+                header = bytearray(start_word + data)[0:parser.HEADER_SIZE]
+
+                nsamples, frame_id, fpga_ts, fpga_tdc = parser.unpack_header(header)
+                # print(f"{nsamples:4X} {frame_id:4X} {fpga_ts:8X} {fpga_tdc:16X}");
+                # frame_size = calc_frame_size(nsamples)
+                # payload_size = calc_payload_size(nsamples)                
+
                 if len(data) != payload_len_total - 2: #timeout?
                     logger.error(f"Readback was not the right length: {len(data)} vs {payload_len_total-2}")
                     logger.error(f"nsamples_bytes: {bt}\t ")
-                    logger.error(data)
+                    #logger.error(data)
+                    if datafile is not None:
+                        datafile.write(start_word)
+                        datafile.write(data)
+
+                    self.binary_stop_batch()
                     break
-                
                 
                 self.nbytes_recv += len(data) + 2
                 
                 if datafile is not None:
-                    datafile.write(nsamples_bin)
+                    datafile.write(start_word)
                     datafile.write(data)
-#                 else: 
-#                     answer += data
-                    
+
+                start_bytes = []
+                start_word = []
+                nstartwords_remaining = 2
+
+
+
             else: #Socket timeout 
                 if time.time() > tstart + self._timeout:
-                    logger.debug(f"Socket timeout detected.")
+                    logger.debug(f"Readout timeout detected.")
                 elif resp['CMD_RC'] == wubCMD_RC.CMD_RC_OK:
                     logger.debug("Received exit code from wuBase.")
                     break
@@ -578,6 +678,8 @@ class wubCTL():
         logger.info(f"Total number of bytes received:  {self.nbytes_recv}")
         self._batch_mode_running = False
         
+        self.read(self._s.in_waiting)
+
         return 0
 
 

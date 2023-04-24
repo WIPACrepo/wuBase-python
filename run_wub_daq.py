@@ -104,7 +104,8 @@ def main(cli_args):
                 if wubctl.isascii:
                     info_str = f"Progress: {wubctl.nbytes_recv:8.2e} bytes"
                 else:
-                    info_str = f"Progress: {wubctl.nframes_binary} frames ({wubctl.nbytes_recv:8.2e} bytes)"
+                    #{wubctl.nframes_binary} frames 
+                    info_str = f"Progress: ({wubctl.nbytes_recv:8.2e} bytes)"
                 logger.info(info_str)
             if maxruntime > 0 and tnow - tstart > maxruntime:
                 logger.info("DAQ runtime exceeded... Exiting.")
@@ -123,6 +124,17 @@ def main(cli_args):
         logger.error(f"Rx thread failed to complete!")
 
     if not wubctl.isascii:
+        logger.info(wubctl.cmd_ok())
+
+        logger.info("Getting binary stats from wuBase.")
+        resp = wubctl.cmd_binary_stats();
+        
+        rc = wubCMD_RC(resp['response']['CMD_RC']).name
+        nhits_tx =  int(resp['response']['retargs'][0])
+        nbytes_tx =  int(resp['response']['retargs'][1])
+        logger.info(f"Number of hits transmitted by wuBase:  {nhits_tx}")
+        logger.info(f"Number of bytes transmitted by wuBase: {nbytes_tx}")
+
         logger.info("Sending ASCIIMODE command to wuBase.")        
         #logger.debug(wubctl.cmd_ok())
         resp = wubctl.cmd_asciimode()
@@ -183,15 +195,24 @@ if __name__ == "__main__":
 
     parser.add_argument("--ntosend", type=int, default=-1,
                         help="Number of hits to send in batchmode. Negative means send all available.")
+    parser.add_argument("--debug", action='store_true',
+                        help="Override loglevel to debug")    
 
     
+
     
     cli_args = parser.parse_args()  
+
+    if cli_args.debug: 
+        cli_args.loglevel = "debug"
+
     numeric_level = getattr(logging, cli_args.loglevel.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % cli_args.loglevel)
      
+    
     logger.setLevel(cli_args.loglevel.upper())
+
     ch = logging.StreamHandler()
     format_stream = "%(asctime)s - %(levelname)s - %(name)s - %(funcName)s - %(message)s" #"%(asctime)s - %(name)s %(funcName)s():%(lineno)d\t%(message)s"
     #ch.setFormatter(CustomFormatter(format_stream))
