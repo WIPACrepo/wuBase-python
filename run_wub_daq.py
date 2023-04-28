@@ -22,8 +22,10 @@ def main(cli_args):
 
     wubctl = wubCTL(cli_args.port, baud=cli_args.baud, 
                     mode=cli_args.commsmode, timeout=cli_args.timeout, 
-                    verbosity=cli_args.verbose)
+                    verbosity=cli_args.verbose,
+                    store_mode=cli_args.store_mode)
     #wubctl = wubCTL(**cli_args.__dict__)
+    #print(wubctl._s.BAUDRATES)
     
     config = parse_config(cli_args.config)
     setup_commands = config['setup']
@@ -48,13 +50,13 @@ def main(cli_args):
             cmd = wubCMD_catalog.get_command(setup_cmd_name)
             response = None
 
-            time.sleep(float(sleeptime))
+            
 
             if setup_cmd_args is not None:
                 response = wubctl.send_recv(cmd, *setup_cmd_args)
             else:
                 response = wubctl.send_recv(cmd)
-
+           
             if wubctl.isascii:
                 logger.info(f"Command response:\n{response['response']}")
                 break
@@ -67,11 +69,13 @@ def main(cli_args):
                     break
                 else:
                     logger.warning(f"Issue executing command. Retrying {retries+1}/10.")
-                    if retries > 0:
+                    if retries > 10:
                         logger.error(f"\tERROR: Number of retries exceeds threshold. Exiting...")
                         error_detect = True
                         break
                     retries+=1
+                
+            time.sleep(float(sleeptime))
 
         
         print("-----------------------------------------")    
@@ -195,6 +199,10 @@ if __name__ == "__main__":
 
     parser.add_argument("--ntosend", type=int, default=-1,
                         help="Number of hits to send in batchmode. Negative means send all available.")
+    
+    parser.add_argument("--store_mode", type=str, default='bulk', 
+                        help="Choose which method of recieving and processing hits.")
+    
     parser.add_argument("--debug", action='store_true',
                         help="Override loglevel to debug")    
 
@@ -245,9 +253,10 @@ if __name__ == "__main__":
     field_styles=FIELD_STYLES,
     )
 
-    #logger.addHandler(ch)
-
-
+    if cli_args.ofile is not None:        
+        fh = logging.FileHandler(cli_args.ofile + '.cmd_log')
+        fh.setLevel(logging.INFO)
+        logger.addHandler(fh)
     
     main(cli_args)
     
