@@ -39,7 +39,7 @@ def main(filename, ntoread, nsamples_expected):
         print(f"Header bytes:")
         bt = [f"{i:2X}" for i in hdr]
         print(f"{bt}")
-        print(f"--> Unpacked info:\n\tnsamples: {nsamples}\tframe_id: {frame_id:4X} fpga_ts: 0x{fpga_ts:8X}")# fpga_tdc: {bin(fpga_tdc)[2::]:064}")
+        print(f"--> Unpacked info:\n\tnsamples: {nsamples}\tframe_id: {frame_id:4X} fpga_ts: 0x{fpga_ts:8X} fpga_tdc: 0x{fpga_tdc:X}")
 
 
 
@@ -62,7 +62,7 @@ def main(filename, ntoread, nsamples_expected):
         frame_number+=1
         print(f"------------------------------------")
         
-    print(f"nfames parsed: {frame_number}; nbytes parsed: {nbytes_read}")
+    print(f"nfames parsed: 0x{frame_number:X}; nbytes parsed: 0x{nbytes_read:X}")
 
     f.close()
 
@@ -77,7 +77,7 @@ if __name__ == "__main__":
                         help="File to parse")
     parser.add_argument("--ntoparse", type=int, default=-1, 
                             help="Number of traces to parse from file. (-1 means all)") 
-    parser.add_argument("--nsamples", type=int, default=0x8,
+    parser.add_argument("--nsamples", type=int, default=0x1,
                             help="Number of expected samples in the test structure.")                       
 
     cli_args = parser.parse_args()  

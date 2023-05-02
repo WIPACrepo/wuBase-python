@@ -15,6 +15,7 @@ ADC_DATA_OFFSET   = FPGA_TDC_OFFSET   + FPGA_TDC_WIDTH
 HEADER_SIZE = NSAMPLES_WIDTH + HIT_NUMBER_WIDTH + FPGA_TS_WIDTH + FPGA_TDC_WIDTH
 
 def unpack_header(header):
+    
     header = bytearray(header)
     header.insert(FPGA_TS_OFFSET + FPGA_TS_WIDTH, 0) #Undo the C close-packing
     header.insert(FPGA_TS_OFFSET + FPGA_TS_WIDTH+1, 0) #Undo the C close-packing

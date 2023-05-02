@@ -49,4 +49,5 @@
 {"TEST_DOUBLE",          SERV_SLOW_CTRL, CMD_TEST_DOUBLE          , "d", "d"},
 {"VERBOSE",              SERV_SLOW_CTRL, CMD_VERBOSE              , "B", ""},
 {"BINARY_STATS",         SERV_SLOW_CTRL, CMD_BINARY_STATS         , "", "II"},
-{"TESTPACKETS",          SERV_SLOW_CTRL, CMD_TESTPACKETS          , "i", ""},
+{"TESTPACKETS",          SERV_SLOW_CTRL, CMD_TESTPACKETS          , "bI", ""},
+{"INFINITEPACKETS",      SERV_SLOW_CTRL, CMD_INFINITEPACKETS      , "", ""},

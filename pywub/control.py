@@ -110,13 +110,13 @@ class wubCTL():
     
     def __init__(self, port=None, baud=1181818, mode="ascii", 
                  autobaud=True, timeout=1, verbosity=False,
-                 store_mode='bulk'):
+                 store_mode='bulk', parity=False):
         
         self._s = None
         self._port = port
         self._baudrate = baud
+        self._parity = serial.PARITY_EVEN if parity else serial.PARITY_NONE
 
-        
         self._timeout=timeout
       
         #DAQ settings
@@ -152,7 +152,9 @@ class wubCTL():
         try:
             self._s = serial.Serial(self._port, self._baudrate, 
                                     timeout=self._timeout, 
-                                    stopbits=1, parity = serial.PARITY_NONE)
+                                    stopbits=1, 
+                                    parity =self._parity, 
+                                    bytesize = 8)
             self._s.flushInput()
             self._s.flushOutput()
             
@@ -315,11 +317,14 @@ class wubCTL():
         self.send(cmd)
         recv_buf = []
         
+        error_found = False
         #FIXME: Add a timeout here.
-        while("".join(deq) != 'OK\n'):
+        while("".join(deq) != 'OK\n' and not error_found):
             response = self._s.read(size=self._s.in_waiting)
             recv_buf += response
             for i in response.decode():
+                if i == '?':
+                    error_found = True
                 deq.append(i)
         
         if command == wubCMD_catalog.binarymode:
@@ -638,9 +643,9 @@ class wubCTL():
 
                 else: #waiting for frame data
                     
-                    if self.bytes_in_waiting >=  frame_size-parser.NSAMPLES_WIDTH : #-2 because we already read the frame header
+                    if self.bytes_in_waiting >=  frame_size - parser.NSAMPLES_WIDTH : #subtraction because we already read the frame header
                         
-                        data = self.read(frame_size-2)
+                        data = self.read(frame_size - parser.NSAMPLES_WIDTH)
 
                         logger.debug(f"len(data) = {len(data)}")
                         self.nbytes_recv += len(data)
@@ -715,17 +720,14 @@ class wubCTL():
                 ## ORIGINAL METHOD
                 if(self.bytes_in_waiting > 2):
                 # blocking read of two bytes. 
-                # This will be the total size of the 
+                # This will be the number of samples in the payload.
                 # if timeout, len(data) != nstartwords_remaining, or 0 if nothing recieved.
 
-                    # logger.debug(f"pre-read in_waiting: {self.bytes_in_waiting}")
                     start_bytes=self.read(nstartwords_remaining)
-                    # logger.debug(f"Start bytes: {start_bytes}")
 
                     if len(start_bytes) == 2:
                         start_word = start_bytes
                     elif len(start_bytes)==1:
-                        # logger.debug("Recieved partial start word.")
                         start_word += [start_bytes[0]]
                         nstartwords_remaining-=1
                         continue
@@ -747,7 +749,7 @@ class wubCTL():
                         header = bytearray(start_word + data)[0:parser.HEADER_SIZE]
 
                         nsamples, frame_id, fpga_ts, fpga_tdc = parser.unpack_header(header)
-                        # print(f"{nsamples:4X} {frame_id:4X} {fpga_ts:8X} {fpga_tdc:16X}");
+                        logger.debug(f"{nsamples:4X} {frame_id:4X} {fpga_ts:8X} {fpga_tdc:16X}");
                         # frame_size = calc_frame_size(nsamples)
                         # payload_size = calc_payload_size(nsamples)                
 
