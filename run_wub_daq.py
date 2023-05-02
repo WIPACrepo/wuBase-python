@@ -29,6 +29,15 @@ def main(cli_args):
 
     config = parse_config(cli_args.config)
     setup_commands = config['setup']
+
+    #The following two commands override send_recv because of the way commsmode is set up.
+    # The device boots in autobaud mode and this doesn't work at higher baudrates, so:
+    logger.info("Setting wuBase baud rate to fixed...")
+    resp = wubctl.send_recv_ascii(wubCMD_catalog.baud, cli_args.baud)
+    logger.debug(f"Response: {resp['response']}")
+    #Check if the device was already in autobaud mode: 
+    if resp['response'][0] == '?':
+        logger.warning("Invalid command response; possibly the device was already in fixed baud mode. ")
     
     # The device boots in asciimode, so ensure that it is operating in the right mode: 
     if not wubctl.isascii:

@@ -329,6 +329,14 @@ class wubCTL():
         
         if command == wubCMD_catalog.binarymode:
             self.set_comms_mode("BINARY")
+        elif command == wubCMD_catalog.baud:
+            if args[0] == -1:
+                self._autobaud = True
+                self._s.baudrate = self._baudrate
+            else:
+                self._autobaud = False
+                self._s.baudrate = args[0]
+                self._baudrate = args[0]            
         
         logger.debug(f"Command response bytes: {recv_buf}")
         
@@ -637,6 +645,9 @@ class wubCTL():
                         
                         waiting_for_header = False
                         self.nbytes_recv += 2
+
+                        # if datafile is not None:
+                        #     datafile.write(start_bytes)
 
                     else:
                         continue
