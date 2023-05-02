@@ -178,6 +178,7 @@ def main(cli_args):
     logger.info(resp['response'])
 
     if output_handler is not None: 
+        output_handler.flush()
         output_handler.close()
     logger.info("Exiting....")    
 
