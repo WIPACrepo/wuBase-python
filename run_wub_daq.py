@@ -69,6 +69,7 @@ def main(cli_args):
             if wubctl.isascii:
                 if response['response'][0] != '?':
                     logger.info(f"Command response:\n{response['response']}")
+                    retries = 0
                     break
                 else:
                     logger.warning(f"Issue executing command. Retrying {retries+1}/10.")
@@ -82,7 +83,8 @@ def main(cli_args):
                 logger.info(f"CMD_RC: {wubCMD_RC(response['CMD_RC']).name}")
 
                 if response['CMD_RC'] == wubCMD_RC.CMD_RC_OK:
-                    logger.info(f"CMD_retargs: {response['retargs']}")        
+                    logger.info(f"CMD_retargs: {response['retargs']}")       
+                    retries = 0 
                     break
                 else:
                     logger.warning(f"Issue executing command. Retrying {retries+1}/10.")
@@ -128,7 +130,7 @@ def main(cli_args):
                     info_str = f"Progress: {wubctl.nbytes_recv:8.4e} bytes"
                 else:
                     #{wubctl.nframes_binary} frames 
-                    info_str = f"Progress: ({wubctl.nbytes_recv:8.4e} bytes) bytes in_waiting: {wubctl.bytes_in_waiting}"
+                    info_str = f"Progress: {wubctl.nbytes_recv:8.4e} bytes -- bytes in_waiting: {wubctl.bytes_in_waiting}"
 
                     
                 bytes_tracker.append(wubctl.nbytes_recv)
@@ -162,8 +164,8 @@ def main(cli_args):
         rc = wubCMD_RC(resp['response']['CMD_RC']).name
         nhits_tx =  int(resp['response']['retargs'][0])
         nbytes_tx =  int(resp['response']['retargs'][1])
-        logger.info(f"Number of hits transmitted by wuBase:  {nhits_tx}")
-        logger.info(f"Number of bytes transmitted by wuBase: {nbytes_tx}")
+        logger.info(f"Hits transmitted by wuBase:  {nhits_tx} (0x{nhits_tx:X})")
+        logger.info(f"Bytes transmitted by wuBase: {nbytes_tx} (0x{nbytes_tx:X})")
 
         logger.info("Sending ASCIIMODE command to wuBase.")        
         #logger.debug(wubctl.cmd_ok())

@@ -44,15 +44,18 @@ def main(filename, ntoread):
         payload = f.read(payload_size)
         nbytes_read += len(payload)
 
+
         print(f"Frame number {frame_number:X}")
         print(f"Header bytes:")
-        #bt = [f"{i:2X}" for i in hdr]
-        #print(f"{bt}")
-        print(f"--> Unpacked info:\n\tnsamples: {nsamples}\tframe_id: {frame_id:4X} fpga_ts: 0x{fpga_ts:8X} fpga_tdc: {bin(fpga_tdc)[2::]:064}")
+        bt = [f"{i:02X}" for i in hdr]
+        print(f"{bt}")
+        print(f"--> Unpacked info:\n\tnsamples: 0x{nsamples:4X}\tdecoded frame_id: 0x{frame_id:4X} fpga_ts: 0x{fpga_ts:16X} fpga_tdc: 0x{fpga_tdc:016X}")
+
+
 
         print(f"--> Payload size: {payload_size}")
-        #bt = [f"{i:2X}" for i in payload]
-        #print(f"{bt}")      
+        # bt = [f"{i:2X}" for i in payload]
+        # print(f"{bt}") 
 
         if len(payload) != payload_size:
             print(f"Possible data corruption or EOF: request: {payload_size} deliver: {len(payload)}")

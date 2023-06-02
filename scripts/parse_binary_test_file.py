@@ -39,7 +39,7 @@ def main(filename, ntoread, nsamples_expected):
         print(f"Header bytes:")
         bt = [f"{i:2X}" for i in hdr]
         print(f"{bt}")
-        print(f"--> Unpacked info:\n\tnsamples: {nsamples}\tframe_id: {frame_id:4X} fpga_ts: 0x{fpga_ts:8X} fpga_tdc: 0x{fpga_tdc:X}")
+        print(f"--> Unpacked info:\n\tnsamples: {nsamples}\tdecoded frame_id: {frame_id:4X} fpga_ts: 0x{fpga_ts:8X} fpga_tdc: 0x{fpga_tdc:X}")
 
 
 
