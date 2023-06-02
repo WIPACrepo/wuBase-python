@@ -576,63 +576,9 @@ class wubCTL():
                 self.binary_stop_batch()
                 break
 
-            if self._store_mode == "pingpong":
-                if waiting_for_header: #Waiting for exactly 2 bytes (NSAMPLES_WIDTH)
 
-                    if(self.bytes_in_waiting >= parser.NSAMPLES_WIDTH):
-                        logger.debug(f"Pre-read bytes in buffer: {self.bytes_in_waiting}")
-
-                        start_bytes = self.read(parser.NSAMPLES_WIDTH)
-                        nsamples = parser.unpack_nsamples(start_bytes)
-
-                        sb = [f"{i:x}" for i in start_bytes]
-                        frame_size = parser.calc_frame_size(nsamples)       
-                        
-                        logger.debug(f"nsamples hex values: {sb}")
-                        logger.debug(f"Expected frame size: {frame_size}")
-                        
-                        waiting_for_header = False
-                        self.nbytes_recv += 2
-
-                        # if datafile is not None:
-                        #     datafile.write(start_bytes)
-
-                    else:
-                        continue
-
-                else: #waiting for frame data
-                    
-                    if self.bytes_in_waiting >=  frame_size - parser.NSAMPLES_WIDTH : #subtraction because we already read the frame header
-                        
-                        data = self.read(frame_size - parser.NSAMPLES_WIDTH)
-
-                        logger.debug(f"len(data) = {len(data)}")
-                        self.nbytes_recv += len(data)
-                        self.nframes_binary += 1
-                        waiting_for_header = True
-
-                        if datafile is not None:
-                            datafile.write(start_bytes)
-                            datafile.write(data)   
-
-                        logger.debug(f"Post-read bytes in buffer: {self.bytes_in_waiting}")
-                    else:
-                        continue
-
-            elif self._store_mode == "AA":
-                ## Datastream is all "A"s, looking for the null byte. 
-
-                if self.bytes_in_waiting:
-                    data = self.read(self.bytes_in_waiting)
-                    for i,d in enumerate(data):
-                        if d != 0xAA:
-                            logger.error(f"Non-A byte detected! {data}")
-                    logger.debug(data)
-                    self.nbytes_recv += len(data)
-
-            elif self._store_mode == "sb":
+            if self._store_mode == "sb":
                 ## Start byte method.
-                
 
                 if self.ro_state == readout_state.waiting_on_start_word:
                     #logger.debug("Waiting on start byte...")
@@ -709,7 +655,7 @@ class wubCTL():
                     datafile.write(data)
                 self.nbytes_recv += len(data)                        
 
-            else: 
+            else:  #FIXME: Need to deal with start byte!
                 ## ORIGINAL METHOD
                 if(self.bytes_in_waiting > parser.NSAMPLES_WIDTH):
                 # blocking read of bytes. 
