@@ -87,13 +87,23 @@ def parse_config(filename:str):
 
     setup_command_list = []
     for setting in config.split("\n"):
+        #Go ahead and check the format by looking at the record length.
+        if len(setting) == 3:
+            offset = 0
+        else:
+            offset = 1
+
         if setting[0] != '#':
             spl = setting.split(" ")
-            command = spl[0]
-            sleeptime = spl[1]
+            
+            for s in spl:
+                s.strip()
+
+            command = spl[0 + offset]
+            sleeptime = spl[1 + offset]
             modified_command_args = None
             if len(spl) > 2: 
-                command_args = spl[2::]
+                command_args = spl[(2 + offset)::]
                 modified_command_args = []
                 for arg in command_args:
                     if arg.isnumeric():
@@ -111,6 +121,9 @@ def parse_config(filename:str):
 
 
 class wubCTL():
+    '''
+    Base class for running wuBase via USB UART. 
+    '''
     
     def __init__(self, port=None, baud=1181818, mode="ascii", 
                  autobaud=True, timeout=1, verbosity=False,
