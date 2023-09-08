@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 class wuBase():
     def __init__(self, basenumber=None, baud=9600):
         self._basenumber = basenumber
-        self._autobaud = False
+        self._autobaud = True
         self._commsbaud = baud
         self._mode = "A"
 
