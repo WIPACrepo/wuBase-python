@@ -68,7 +68,7 @@ def main(cli_args):
            
             if wubctl.isascii:
                 if response['response'][0] != '?':
-                    logger.info(f"Command response:\n{response['response']}")
+                    logger.info(f"Command response: {response['response']}")
                     retries = 0
                     break
                 else:

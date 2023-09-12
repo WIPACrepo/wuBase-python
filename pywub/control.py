@@ -87,11 +87,13 @@ def parse_config(filename:str):
 
     setup_command_list = []
     for setting in config.split("\n"):
-        #Go ahead and check the format by looking at the record length.
-        if len(setting) == 3:
-            offset = 0
-        else:
-            offset = 1
+        # #Go ahead and check the format by looking at the record length.
+        # if len(setting) == 3:
+        #     offset = 0
+        # else:
+        #     offset = 1
+
+        # print("Setting:", setting, len(setting))
 
         if setting[0] != '#':
             spl = setting.split(" ")
@@ -99,9 +101,17 @@ def parse_config(filename:str):
             for s in spl:
                 s.strip()
 
+            mask = None 
+            if setting[0].isnumeric():
+                offset = 1
+                mask = spl[0]
+            else: 
+                offset = 0
+
             command = spl[0 + offset]
             sleeptime = spl[1 + offset]
             modified_command_args = None
+            
             if len(spl) > 2: 
                 command_args = spl[(2 + offset)::]
                 modified_command_args = []
@@ -111,7 +121,7 @@ def parse_config(filename:str):
                     else:
                         modified_command_args += [float(arg)]
 
-            cmd_line = dict(name=command, sleeptime=sleeptime, args=modified_command_args)
+            cmd_line = dict(name=command, sleeptime=sleeptime, args=modified_command_args, mask=mask)
             setup_command_list += [cmd_line]
         else:
             continue
