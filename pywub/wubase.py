@@ -34,10 +34,18 @@ logger = logging.getLogger(__name__)
 
 class wuBase():
     def __init__(self, basenumber=None, baud=9600):
+        self._ispowered = False
         self._basenumber = basenumber
         self._autobaud = True
         self._commsbaud = baud
         self._mode = "A"
+
+    @property
+    def ispowered(self) -> bool :
+        return self._ispowered
+
+    def setpowered(self):
+        self._ispowered = True
 
     @property
     def basenumber(self):
