@@ -37,31 +37,40 @@ class wuBase():
         self._ispowered = False
         self._basenumber = basenumber
         self._autobaud = True
+        self._baud = baud        
         self._commsbaud = baud
-        self._mode = "A"
+        self._commsmode = "A"
+
 
     @property
     def ispowered(self) -> bool :
         return self._ispowered
 
-    def setpowered(self):
-        self._ispowered = True
+    def setpowered(self, state: bool):
+        self._ispowered = state
 
     @property
-    def basenumber(self):
+    def basenumber(self) -> int:
         return self._basenumber
 
     @property
-    def mode(self):
-        return self._mode
+    def mode(self) -> str:
+        return self._commsmode
     
     @property
-    def autobaud(self):
+    def autobaud(self) -> bool:
         return self._autobaud
+    
+    def setautobaud(self, state: bool):
+        self._autobaud = state
+    
+    @property
+    def baud(self) -> bool:
+        return self._baud    
     
     @property 
     def isascii(self) -> bool :
-        if (self._mode.upper())[0] == 'A':
+        if (self._commsmode.upper())[0] == 'A':
             return True
         else:
             return False   
