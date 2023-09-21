@@ -1,6 +1,8 @@
 import logging
 logger = logging.getLogger(__name__)
 
+
+WUBASE_DEFAULT_BAUD = 9600
 # def parse_device_config(filename:str):
 
 #     with open(filename, 'r') as f:
@@ -33,14 +35,21 @@ logger = logging.getLogger(__name__)
 
 
 class wuBase():
-    def __init__(self, basenumber=None, baud=9600):
-        self._ispowered = False
+    def __init__(self, basenumber, baud=WUBASE_DEFAULT_BAUD):
+        #Base info
         self._basenumber = basenumber
+        self._ispowered = False
+        
+        #UART mode
         self._autobaud = True
-        self._baud = baud        
         self._commsbaud = baud
-        self._commsmode = "A"
+        
+        #ASCII or Binary
+        self._comms_mode = "ASCII"
 
+    @property
+    def basenumber(self) -> int:
+        return self._basenumber
 
     @property
     def ispowered(self) -> bool :
@@ -49,13 +58,7 @@ class wuBase():
     def setpowered(self, state: bool):
         self._ispowered = state
 
-    @property
-    def basenumber(self) -> int:
-        return self._basenumber
 
-    @property
-    def mode(self) -> str:
-        return self._commsmode
     
     @property
     def autobaud(self) -> bool:
@@ -66,11 +69,32 @@ class wuBase():
     
     @property
     def baud(self) -> bool:
-        return self._baud    
+        return self._baud
     
+    def setbaud(self, baud: int):
+        if baud < 0:
+            self.baud = WUBASE_DEFAULT_BAUD
+            self.setautobaud(True)
+        else:
+            self._baud = baud
+            self.setautobaud(False)
+
+    
+    @property
+    def comms_mode(self) -> str:
+        return self._comms_mode
+
     @property 
     def isascii(self) -> bool :
-        if (self._commsmode.upper())[0] == 'A':
+        if (self._comms_mode.upper())[0] == 'A':
             return True
         else:
-            return False   
+            return False
+        
+    def set_comms_mode(self, mode:str):
+        if (mode.upper())[0] == 'A':
+            #self.cmd_asciimode()
+            self._comms_mode = 'ASCII'
+        else:
+            #self.cmd_binarymode()
+            self._comms_mode = 'BINARY'
