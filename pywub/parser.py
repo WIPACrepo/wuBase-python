@@ -1,6 +1,8 @@
 import struct
 
+START_BYTE = 0x21
 
+START_BYTE_WIDTH = 1
 NSAMPLES_WIDTH = 2
 HIT_NUMBER_WIDTH = 2
 FPGA_TS_WIDTH = 6
@@ -14,11 +16,30 @@ ADC_DATA_OFFSET   = FPGA_TDC_OFFSET   + FPGA_TDC_WIDTH
 
 HEADER_SIZE = NSAMPLES_WIDTH + HIT_NUMBER_WIDTH + FPGA_TS_WIDTH + FPGA_TDC_WIDTH
 
+def unpack_nsamples(d):
+
+    if NSAMPLES_WIDTH == 2:
+        return struct.unpack("<H", d)[0]
+    else:
+        return struct.unpack("<B", d)[0]
+
 def unpack_header(header):
+    
     header = bytearray(header)
+    
     header.insert(FPGA_TS_OFFSET + FPGA_TS_WIDTH, 0) #Undo the C close-packing
     header.insert(FPGA_TS_OFFSET + FPGA_TS_WIDTH+1, 0) #Undo the C close-packing
-    return struct.unpack("<HHQQ", header)
+    
+
+    fmt = "<" #endianness + start byte
+    if NSAMPLES_WIDTH == 2:
+        fmt += "H"
+    else:
+        fmt += "B"
+    
+    fmt += "HQQ"
+    
+    return struct.unpack(fmt, header)
     
 def unpack_payload(payload):
     unpack_fmt = "<" + "".join(["H" for s in range(int(len(payload)/2))])

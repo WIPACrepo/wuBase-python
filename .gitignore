@@ -5,3 +5,4 @@ __pycache__/
 build
 *.txt
 *.cmd_log
+*.pdf

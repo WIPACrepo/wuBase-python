@@ -6,7 +6,7 @@ import sys
 import time
 #import numpy as np
 import struct
-#from enum import Enum, IntEnum
+from enum import IntEnum, auto
 from io import TextIOWrapper
 #import yaml
 import threading
@@ -24,6 +24,10 @@ wubCMD_entry = catalog.wubCMD_entry
 import logging
 logger = logging.getLogger(__name__)
 
+class readout_state(IntEnum):
+    waiting_on_start_word = ord('a') #is a char because we can see it in the terminal directly. 
+    waiting_on_nsamples = auto()
+    waiting_on_payload = auto()
 
 
 class CustomFormatter(logging.Formatter):
@@ -83,13 +87,33 @@ def parse_config(filename:str):
 
     setup_command_list = []
     for setting in config.split("\n"):
+        # #Go ahead and check the format by looking at the record length.
+        # if len(setting) == 3:
+        #     offset = 0
+        # else:
+        #     offset = 1
+
+        # print("Setting:", setting, len(setting))
+
         if setting[0] != '#':
             spl = setting.split(" ")
-            command = spl[0]
-            sleeptime = spl[1]
+            
+            for s in spl:
+                s.strip()
+
+            mask = None 
+            if setting[0].isnumeric():
+                offset = 1
+                mask = spl[0]
+            else: 
+                offset = 0
+
+            command = spl[0 + offset]
+            sleeptime = spl[1 + offset]
             modified_command_args = None
+            
             if len(spl) > 2: 
-                command_args = spl[2::]
+                command_args = spl[(2 + offset)::]
                 modified_command_args = []
                 for arg in command_args:
                     if arg.isnumeric():
@@ -97,7 +121,7 @@ def parse_config(filename:str):
                     else:
                         modified_command_args += [float(arg)]
 
-            cmd_line = dict(name=command, sleeptime=sleeptime, args=modified_command_args)
+            cmd_line = dict(name=command, sleeptime=sleeptime, args=modified_command_args, mask=mask)
             setup_command_list += [cmd_line]
         else:
             continue
@@ -107,16 +131,19 @@ def parse_config(filename:str):
 
 
 class wubCTL():
+    '''
+    Base class for running wuBase via USB UART. 
+    '''
     
     def __init__(self, port=None, baud=1181818, mode="ascii", 
                  autobaud=True, timeout=1, verbosity=False,
-                 store_mode='bulk'):
+                 store_mode='bulk', parity=False):
         
         self._s = None
         self._port = port
         self._baudrate = baud
+        self._parity = serial.PARITY_EVEN if parity else serial.PARITY_NONE
 
-        
         self._timeout=timeout
       
         #DAQ settings
@@ -152,9 +179,12 @@ class wubCTL():
         try:
             self._s = serial.Serial(self._port, self._baudrate, 
                                     timeout=self._timeout, 
-                                    stopbits=1, parity = serial.PARITY_NONE)
+                                    stopbits=1, 
+                                    parity =self._parity, 
+                                    bytesize = 8)
             self._s.flushInput()
             self._s.flushOutput()
+                       
             
         except serial.SerialException: 
             logger.error(f"Failed to open port \"{port}\"; exiting.")
@@ -315,15 +345,26 @@ class wubCTL():
         self.send(cmd)
         recv_buf = []
         
+        error_found = False
         #FIXME: Add a timeout here.
-        while("".join(deq) != 'OK\n'):
+        while("".join(deq) != 'OK\n' and not error_found):
             response = self._s.read(size=self._s.in_waiting)
             recv_buf += response
             for i in response.decode():
+                if i == '?':
+                    error_found = True
                 deq.append(i)
         
         if command == wubCMD_catalog.binarymode:
             self.set_comms_mode("BINARY")
+        elif command == wubCMD_catalog.baud:
+            if args[0] == -1:
+                self._autobaud = True
+                self._s.baudrate = self._baudrate
+            else:
+                self._autobaud = False
+                self._s.baudrate = args[0]
+                self._baudrate = args[0]            
         
         logger.debug(f"Command response bytes: {recv_buf}")
         
@@ -503,73 +544,13 @@ class wubCTL():
     def binary_stop_batch(self):
 
         self.send(wubCMD_catalog.ok.build('b'))
-        time.sleep(0.5) #Wait long enough for the most recent frame to be done.,
+        time.sleep(0.25) #Wait long enough for the most recent frame to be done.,
         resp = self.read(self._s.in_waiting)
         resp_rc = resp[-1]             
         logger.debug(f"Stop return bytes: {resp}")
         logger.info(wubCMD_RC(resp_rc).name)
 
 
-    def binary_batchmode_recv(self, ntosend:int, modenostop:bool, datafile:TextIOWrapper=None) -> dict:
-        '''
-            Binary batchmode receiver.
-        '''
-       
-        logger.debug("Entering BINARY batchmode reciever.")
-        self._batch_mode_running = True
-        self.nframes_binary = 0
-        logger.info(f"Issuing batchmode send with ntosend = {ntosend} and modenostop = {modenostop}")
-        self.nframes_binary = 0
-        
-        resp = self.cmd_send_batch(ntosend, modenostop)['response']
-        try:
-            logger.info(f"***\tCMD_RC: {wubCMD_RC(resp['CMD_RC']).name}")
-        except ValueError:
-            logger.warning(f"*** Invalid RC code in response (likely due to verbosity); full response: {resp}\n")
-
-        tstart = time.time()
-        #Wait for some return data to arrive. 
-        resp['CMD_RC'] = wubCMD_RC.CMD_RC_WAITING
-        self.nbytes_recv = 0
-        while True:
-            
-            if self.request_abort and not self._abort_requested:
-                #e.g. if we control+C'd out of the batch.
-                logger.info("Abort requested. This may leave the wuBase in a weird state.")
-                self._abort_requested = True
-                self.binary_stop_batch()
-                break
-            elif self.request_stop and not self._stop_requested:
-                #Tell the wuBase to stop sending data. 
-                self._stop_requested = True
-                logger.info("Stop requested.")                
-                self.binary_stop_batch()
-                break
-            
-            #blocking read of two bytes. 
-            #This will be the total size of the 
-            #if timeout, len(data) != nstartwords_remaining, or 0 if nothing recieved.
-            data=self.read(self.bytes_in_waiting or 1)
-            self.nbytes_recv += len(data)
-            if datafile is not None:
-                datafile.write(data)
-
-            else: #Socket timeout 
-                if time.time() > tstart + self._timeout:
-                    logger.debug(f"Readout timeout detected.")
-                elif resp['CMD_RC'] == wubCMD_RC.CMD_RC_OK:
-                    logger.debug("Received exit code from wuBase.")
-                    break
-                    
-                
-        #logger.info(f"Total number of frames received: {self.nframes_binary}")
-        logger.info(f"Total number of bytes received:  {self.nbytes_recv}")
-        self._batch_mode_running = False
-        
-        self._s.flushInput()
-        self._s.flushOutput()
-
-        return 0        
 
     def binary_batchmode_recv(self, ntosend:int, modenostop:bool, datafile:TextIOWrapper=None) -> dict:
         '''
@@ -599,6 +580,9 @@ class wubCTL():
         pipeline_buffer = Queue()
         nsamples = 0
         waiting_for_header = True
+
+        self.ro_state = readout_state.waiting_on_start_word
+
         logger.info(f"Note: data storage being done using '{self._store_mode}' method.")
         while True:
            
@@ -615,144 +599,127 @@ class wubCTL():
                 self.binary_stop_batch()
                 break
 
-            if self._store_mode == "pingpong":
-                if waiting_for_header: #Waiting for exactly 2 bytes (NSAMPLES_WIDTH)
 
-                    if(self.bytes_in_waiting >= parser.NSAMPLES_WIDTH):
-                        logger.debug(f"Pre-read bytes in buffer: {self.bytes_in_waiting}")
+            if self._store_mode == "sb":
+                ## Start byte method.
 
-                        start_bytes = self.read(parser.NSAMPLES_WIDTH)
-                        nsamples = struct.unpack("<H", start_bytes)[0]
+                if self.ro_state == readout_state.waiting_on_start_word:
+                    #logger.debug("Waiting on start byte...")
 
-                        sb = [f"{i:x}" for i in start_bytes]
-                        frame_size = parser.calc_frame_size(nsamples)       
+                    if self.bytes_in_waiting >= parser.START_BYTE_WIDTH:
+                        start_byte = self.read(parser.START_BYTE_WIDTH)
+                        self.nbytes_recv += len(start_byte)
+                    else:
+                        continue
+
+                    dc = struct.unpack("<B", start_byte)[0]
+                    if dc  != parser.START_BYTE:
+                        logger.warning(f"Start byte not read at expected spot! {dc:x}") 
+                        self.ro_state = readout_state.waiting_on_start_word
+                    else:
+                        self.ro_state = readout_state.waiting_on_nsamples
+
+                elif self.ro_state == readout_state.waiting_on_nsamples:
+                    logger.debug("Waiting on nsamples...")
+
+                    if self.bytes_in_waiting >= parser.NSAMPLES_WIDTH:
+                        nsamples_bytes = self.read(parser.NSAMPLES_WIDTH)
+                        self.nbytes_recv += len(nsamples_bytes)
+
+                        nsamples = parser.unpack_nsamples(nsamples_bytes)
+                        hex_nsamples = [f"{i:x}" for i in nsamples_bytes]
+                        logger.debug(f"Decoded nsamples: {nsamples}; bytes = {hex_nsamples}")
                         
-                        logger.debug(f"nsamples hex values: {sb}")
-                        logger.debug(f"Expected frame size: {frame_size}")
-                        
-                        waiting_for_header = False
-                        self.nbytes_recv += 2
+                        self.ro_state = readout_state.waiting_on_payload
+
+                        if datafile is not None:
+                            datafile.write(nsamples_bytes)
 
                     else:
                         continue
 
-                else: #waiting for frame data
+                elif self.ro_state == readout_state.waiting_on_payload:
+
+
+                    frame_size = parser.calc_frame_size(nsamples)
+                    logger.debug(f"Waiting on payload... Required/In waiting: {frame_size - parser.NSAMPLES_WIDTH } / {self.bytes_in_waiting}")
+
                     
-                    if self.bytes_in_waiting >=  frame_size-parser.NSAMPLES_WIDTH : #-2 because we already read the frame header
+                    if self.bytes_in_waiting >= frame_size - parser.NSAMPLES_WIDTH:
+
+                        readout = self.read(frame_size - parser.NSAMPLES_WIDTH)
+                        self.nbytes_recv += len(readout)
+
+
+                        header = (nsamples_bytes + readout)[0:parser.HEADER_SIZE]
+                        #logger.debug(header)
+                        nsamples, frame_id, fpga_ts, fpga_tdc = parser.unpack_header(header)
+
+                        logger.debug(f"{nsamples:4X} {frame_id:4X} {fpga_ts:8X} {fpga_tdc:16X}");
                         
-                        data = self.read(frame_size-2)
-
-                        logger.debug(f"len(data) = {len(data)}")
-                        self.nbytes_recv += len(data)
-                        self.nframes_binary += 1
-                        waiting_for_header = True
+                        payload = (nsamples_bytes + readout)[parser.HEADER_SIZE::]
+                        payload_hex = [f"{i:x}" for i in payload]
+                        logger.debug(f"Payload size: {parser.calc_payload_size(nsamples)}")
+                        logger.debug(f"Payload hex:  {payload_hex}")
+                        self.ro_state = readout_state.waiting_on_start_word
 
                         if datafile is not None:
-                            datafile.write(start_bytes)
-                            datafile.write(data)   
+                            datafile.write(readout)
 
-                        logger.debug(f"Post-read bytes in buffer: {self.bytes_in_waiting}")
-                    else:
+                        self.nframes_binary += 1
+                    else: 
                         continue
-
-            elif self._store_mode == "queue":
-                ## QUEUE BASED METHOD
-                if(self.bytes_in_waiting):
-                    [pipeline_buffer.put(b) for b in self.read(self.bytes_in_waiting)]
-
-                    if pipeline_buffer.qsize() > 8190:
-                        #Process a chunk
-
-                        start_bytes = bytes([pipeline_buffer.get() for i in range(2)])
-                        bt = [f"{i:x}" for i in start_bytes]
-                        logger.debug(f"nsamples hex values: {bt}")
-                        nsamples = struct.unpack("<H", start_bytes)[0]
-                        payload_len_total = parser.calc_frame_size(nsamples)
-                        logger.debug(f"nsamples = {nsamples}; payload_length = {payload_len_total}")                        
-                        logger.debug(f"Queue length: {pipeline_buffer.qsize()}")
-                        data = bytes([pipeline_buffer.get() for i in range(payload_len_total-2)])
-
-                        self.nframes_binary += 1
-                        self.nbytes_recv += len(data)        
-
-                        if datafile is not None:
-                            datafile.write(start_bytes)
-                            datafile.write(data)          
-
+                        
             elif self._store_mode == "bulk":
                 ## BASIC DUMP METHOD
                 data = self.read(self.bytes_in_waiting)
                 if datafile is not None:
                     #datafile.write(start_word)
                     datafile.write(data)
-                self.nbytes_recv += len(data)                
+                self.nbytes_recv += len(data)                        
 
-            elif self._store_mode == "rewrite":
-                ## GENERIC REWRITE
-                if(self.bytes_in_waiting > 2):
-                    start_bytes = self.read(2)
-
-                    bt = [f"{i:x}" for i in start_bytes]
-
-                    logger.debug(f"nsamples hex values: {bt}")
-                    nsamples = struct.unpack("<H", start_bytes)[0]
-                    payload_len_total = parser.calc_frame_size(nsamples)
-                    logger.debug(f"nsamples = {nsamples}; payload_length = {payload_len_total}")              
-
-                    data = self.read(payload_len_total-2) #We've already read 2 bytes of the toal length.
-                    logger.debug(f"Len(data) = {len(data)}")
-                    while len(data) + 2 != payload_len_total:
-                        #This will just block indefinitely.
-                        data = data + [self.read(payload_len_total -2 - len(data))]
-
-                    if datafile is not None:
-                        datafile.write(start_bytes)
-                        datafile.write(data)
-
-                    self.nframes_binary += 1
-                    self.nbytes_recv += len(data)          
-            else: 
+            else:  #FIXME: Need to deal with start byte!
                 ## ORIGINAL METHOD
-                if(self.bytes_in_waiting > 2):
-                # blocking read of two bytes. 
-                # This will be the total size of the 
+                if(self.bytes_in_waiting > parser.NSAMPLES_WIDTH):
+                # blocking read of bytes. 
+                # This will be the number of samples in the payload.
                 # if timeout, len(data) != nstartwords_remaining, or 0 if nothing recieved.
 
-                    # logger.debug(f"pre-read in_waiting: {self.bytes_in_waiting}")
-                    start_bytes=self.read(nstartwords_remaining)
-                    # logger.debug(f"Start bytes: {start_bytes}")
+                    start_bytes=self.read(parser.NSAMPLES_WIDTH)
 
-                    if len(start_bytes) == 2:
-                        start_word = start_bytes
-                    elif len(start_bytes)==1:
-                        # logger.debug("Recieved partial start word.")
-                        start_word += [start_bytes[0]]
-                        nstartwords_remaining-=1
-                        continue
+                    start_word = start_bytes
+
+                    # if len(start_bytes) == parser.NSAMPLES_WIDTH:
+                    #     start_word = start_bytes
+                    # else:
+                    #     start_word += [i for i in start_bytes]
+                    #     nstartwords_remaining -= len(start_bytes)
+                    #     continue
                     
-                    if len(start_word)==2:
+                    if len(start_word)==parser.NSAMPLES_WIDTH:
                         
                         bt = [f"{i:x}" for i in start_word]
                         logger.debug(f"nsamples hex values: {bt}")
                         self.nframes_binary += 1
-                        nsamples = struct.unpack("<H", start_word)[0]
+                        #nsamples = struct.unpack("<H", start_word)[0]
+                        nsamples = parser.unpack_nsamples(start_word)
                         # Payload total = 
                         # n_samples + fpga_timestamp (48 bits) + fpga_tdcword (64 bits) + adc_data (16 bits per sample)
                         payload_len_total = parser.calc_frame_size(nsamples)
 
                         logger.debug(f"nsamples = {nsamples}; payload_length = {payload_len_total}")              
                         logger.debug(f"self.bytes_in_waiting: {self.bytes_in_waiting}")
-                        data = self.read(payload_len_total-2) #We've already read 2 bytes of the toal length. 
+                        data = self.read(payload_len_total-parser.NSAMPLES_WIDTH) #We've already read 2 bytes of the toal length. 
                     
                         header = bytearray(start_word + data)[0:parser.HEADER_SIZE]
-
+                        logger.debug(header)
                         nsamples, frame_id, fpga_ts, fpga_tdc = parser.unpack_header(header)
-                        # print(f"{nsamples:4X} {frame_id:4X} {fpga_ts:8X} {fpga_tdc:16X}");
+                        logger.debug(f"{nsamples:4X} {frame_id:4X} {fpga_ts:8X} {fpga_tdc:16X}");
                         # frame_size = calc_frame_size(nsamples)
                         # payload_size = calc_payload_size(nsamples)                
 
-                        if len(data) != payload_len_total - 2: #timeout?
-                            logger.error(f"Readback was not the right length: {len(data)} vs {payload_len_total-2}")
+                        if len(data) != payload_len_total - parser.NSAMPLES_WIDTH: #timeout?
+                            logger.error(f"Readback was not the right length: {len(data)} vs {payload_len_total-parser.NSAMPLES_WIDTH}")
                             logger.error(f"nsamples_bytes: {bt}\t ")
                             #logger.error(data)
                             if datafile is not None:
@@ -762,7 +729,7 @@ class wubCTL():
                             self.binary_stop_batch()
                             break
                         
-                        self.nbytes_recv += len(data) + 2
+                        self.nbytes_recv += len(data) + parser.NSAMPLES_WIDTH
                         
                         if datafile is not None:
                             datafile.write(start_word)
@@ -770,7 +737,7 @@ class wubCTL():
 
                         start_bytes = []
                         start_word = []
-                        nstartwords_remaining = 2
+                        nstartwords_remaining = parser.NSAMPLES_WIDTH
 
 
 
@@ -782,8 +749,8 @@ class wubCTL():
                         break
                     
         if self._store_mode != "bulk":
-            logger.info(f"Total number of frames received: {self.nframes_binary}")
-        logger.info(f"Total number of bytes received:  {self.nbytes_recv}")
+            logger.info(f"Frames received: {self.nframes_binary} (0x{self.nframes_binary:X})")
+        logger.info(f"Bytes received:  {self.nbytes_recv} (0x{self.nbytes_recv:X})")
         self._batch_mode_running = False
         
         self.read(self._s.in_waiting)
