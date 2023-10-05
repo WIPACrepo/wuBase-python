@@ -4,15 +4,19 @@ Python drivers for interacting with a wuBase.
 
 ## Instantiation 
 
-Begin by installing the required Python packages: 
+Begin by installing the required Python packages, followed by the package itself. 
 
 ```
+cd wuBase-python
 pip install -r requirements.txt
+pip install . 
 ```
 
 ## Data Acquisition
 
 ### LOM-style MFH usage
+
+Some documentation will live here. [STM32Tools](https://github.com/WIPACrepo/STM32Tools) contains a LOM interface script which makes signfiicant usage of this module, so look over there. 
 
 ### wuBase "D" module operation
 
