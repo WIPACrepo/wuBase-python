@@ -93,8 +93,6 @@ class wuBase():
         
     def set_comms_mode(self, mode:str):
         if (mode.upper())[0] == 'A':
-            #self.cmd_asciimode()
             self._comms_mode = 'ASCII'
         else:
-            #self.cmd_binarymode()
             self._comms_mode = 'BINARY'

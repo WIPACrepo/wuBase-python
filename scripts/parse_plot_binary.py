@@ -24,6 +24,17 @@ def main(filename, ntoread):
         
         if frame_number >= ntoread and not ntoread == -1:
             break
+
+        sw = f.read(wuparser.START_BYTE_WIDTH)
+
+        if len(sw) == 0: 
+            break
+
+        sw = sw.hex()
+        sw = int(sw, 16)
+        if sw != wuparser.START_BYTE:
+            print(f"Error getting start byte: {sw:x} vs {wuparser.START_BYTE:x}")
+
         hdr = f.read(wuparser.HEADER_SIZE)
         
         if len(hdr) != wuparser.HEADER_SIZE:
