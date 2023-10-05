@@ -4,5 +4,6 @@ setup(
     name='pywub',
     version='2.1',
     packages=['pywub'],
-    package_data={'pywub': ['wubase_commands.txt']}
+    package_data={'pywub': ['wubase_commands.txt']},
+    setup_requires=['wheel']
 )
