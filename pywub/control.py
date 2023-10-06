@@ -1,6 +1,3 @@
-
-
-
 import serial
 import sys
 import time
@@ -10,6 +7,8 @@ from enum import IntEnum, auto
 from io import TextIOWrapper
 #import yaml
 import threading
+from cobs import cobs
+
 
 from . import parser as parser
 from collections import deque 
@@ -93,9 +92,9 @@ def parse_config(filename:str):
         # else:
         #     offset = 1
 
-        # print("Setting:", setting, len(setting))
+#        print("Setting:", setting, len(setting))
 
-        if setting[0] != '#':
+        if len(setting) > 0 and setting[0] != '#':
             spl = setting.split(" ")
             
             for s in spl:
@@ -381,7 +380,12 @@ class wubCTL():
         
         '''
         command_bytes = command.build('b', *args)
+        # logger.debug(f"Pre-COBS bytes: {command_bytes}")
+        command_bytes = cobs.encode(command_bytes) + bytearray([0])
+        # logger.debug(f"Post-COBS bytes: {command_bytes}")
+        
         nsent = self.send(command_bytes)
+
         #logger.debug(f"nsent: {nsent}\t len(command_bytes): {len(command_bytes)}")
         #print([f"{b:x}" for b in command_bytes])
         cmd_return_args_size = struct.calcsize(command.retargs)
@@ -545,7 +549,12 @@ class wubCTL():
 
         self.send(wubCMD_catalog.ok.build('b'))
         time.sleep(0.25) #Wait long enough for the most recent frame to be done.,
-        resp = self.read(self._s.in_waiting)
+        resp = self.read(self._s.in_waiting) #Flush
+
+        self.send(wubCMD_catalog.ok.build('b'))
+        time.sleep(0.01) #Wait long enough for the most recent frame to be done.,
+        resp = self.read(self._s.in_waiting) #Flush
+
         resp_rc = resp[-1]             
         logger.debug(f"Stop return bytes: {resp}")
         logger.info(wubCMD_RC(resp_rc).name)
