@@ -7,7 +7,7 @@ from enum import IntEnum, auto
 from io import TextIOWrapper
 #import yaml
 import threading
-from cobs import cobs
+
 
 
 from . import parser as parser
@@ -380,9 +380,6 @@ class wubCTL():
         
         '''
         command_bytes = command.build('b', *args)
-        logger.debug(f"Pre-COBS bytes: {command_bytes}")
-        command_bytes = cobs.encode(command_bytes) + bytearray([0])
-        logger.debug(f"Post-COBS bytes: {command_bytes}")
         
         nsent = self.send(command_bytes)
 

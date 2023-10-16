@@ -1,7 +1,7 @@
 from enum import IntEnum, auto
 import struct
 import os
-
+from cobs import cobs
 
 
 # try:
@@ -54,7 +54,11 @@ class wubCMD_entry():
         
         #Parse messy strings. 
         self.args = args.replace('"', '').strip(' ')
-        self.retargs = retargs.replace('"', '').strip(' ')        
+        self.retargs = retargs.replace('"', '').strip(' ')
+
+        #Fix the VERSION command format string:
+        if self.cmd_name.lower() == "cmd_version":
+            self.retargs = "31sb31sb"
         
     def __repr__(self):
         return f"ID: {hex(self.cmd_id)}\tCMD_NAME: {self.cmd_name:20s}\
@@ -68,7 +72,7 @@ class wubCMD_entry():
             *args: Variable length argument list to pass along with command. 
             
         Returns:
-            bytes: formatted command object.
+            bytes: formatted command object with delimeter. 
         
         '''
         command_str = ''
@@ -82,15 +86,22 @@ class wubCMD_entry():
                     arg_str += f" {args[i]}"
 
             build = (command_str + arg_str.format(*args)).encode('utf-8')
+
+            #Add delimieter
+            return build + bytes('\r\n', 'utf-8')
             
         else: #Binary
             
             command_str = struct.pack(f"!HH", 0, self.cmd_id) 
             arg_str = struct.pack(f"!{self.args}", *args)
             #print(self.args)
-            build = command_str + arg_str 
+            build = command_str + arg_str
+
+            build = cobs.encode(build) + bytearray([0])
+
+            return build
             
-        return build + bytes('\r\n', 'utf-8')
+        
 
     
 class wubCMD_catalog():
@@ -117,7 +128,7 @@ class wubCMD_catalog():
         self.reference = 'name'
         self._dict = self.name_dict
 
-    def get_command(self, name:wubCMD_entry):
+    def get_command(self, name:str) -> wubCMD_entry:
         return getattr(self, f"{name.lower()}")
         
     def set_reference(self, ref:str):

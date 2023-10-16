@@ -51,3 +51,4 @@
 {"BINARY_STATS",         SERV_SLOW_CTRL, CMD_BINARY_STATS         , "", "II"},
 {"TESTPACKETS",          SERV_SLOW_CTRL, CMD_TESTPACKETS          , "bI", ""},
 {"INFINITEPACKETS",      SERV_SLOW_CTRL, CMD_INFINITEPACKETS      , "", ""},
+{"VERSION",              SERV_SLOW_CTRL, CMD_VERSION              , "", "sbsb"},
