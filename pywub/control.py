@@ -213,6 +213,10 @@ class wubCTL():
             if not self.isascii:
                 logger.info("Reverting to ASCII mode.")
                 self.cmd_asciimode()
+            if not self.autobaud:
+                logger.info("Reverting to autobaud mode.")
+                self.set_autobaud()
+
             logger.info("Shutting down serial connection.")
             self._s.close()
 
@@ -317,11 +321,9 @@ class wubCTL():
         cmd_return_args_size = struct.calcsize(command.retargs)
         cmd_return_code = readback[-1]
         retargs = []
-
+        logger.debug(readback)
         if len(command.retargs) > 0:
-            #print(f"Number of return arguments: {len(command.retargs)}")
-            retargs = [f"{i}" for i in struct.unpack(f'>{command.retargs}', readback[-(cmd_return_args_size+1):-1])]
-            #print(retargs)
+            retargs = [i for i in struct.unpack(f'>{command.retargs}', readback[-(cmd_return_args_size+1):-1])]
         
         return dict(CMD_RC=cmd_return_code, retargs=retargs)
     
