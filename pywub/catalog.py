@@ -58,7 +58,7 @@ class wubCMD_entry():
 
         #Fix the VERSION command format string:
         if self.cmd_name.lower() == "cmd_version":
-            self.retargs = "31sb31sb"
+            self.retargs = "30sb30sb"
         
     def __repr__(self):
         return f"ID: {hex(self.cmd_id)}\tCMD_NAME: {self.cmd_name:20s}\
@@ -162,7 +162,6 @@ data_file = os.path.join(this_dir, "wubase_commands.txt")
 with open(data_file , 'r') as f:
     for line in f.readlines():
         cmd_dict = line.rstrip()[1:-2].split(",")
-        #print(cmd_dict)
         command_set += [wubCMD_entry(*cmd_dict)]
         command_names += [cmd_dict[0].strip('\"')]
         
