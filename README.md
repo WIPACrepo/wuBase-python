@@ -8,7 +8,6 @@ Begin by installing the required Python packages, followed by the package itself
 
 ```
 cd wuBase-python
-pip install -r requirements.txt
 pip install . 
 ```
 
