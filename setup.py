@@ -8,8 +8,8 @@ setup(
     setup_requires=[
         'wheel',
         'coloredlogs>=15.0',
-        'matplotlib>=3.7',
-        'numpy>=1.24',
-        'pyserial>=3.5'
+        'matplotlib',
+        'numpy',
+        'pyserial'
         ]
 )
