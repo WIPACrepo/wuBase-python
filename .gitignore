@@ -6,3 +6,4 @@ build
 *.txt
 *.cmd_log
 *.pdf
+*.egg-info
