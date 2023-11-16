@@ -30,6 +30,8 @@ def main(filename, ntoread):
         if len(sw) == 0: 
             break
 
+        nbytes_read += len(sw)
+
         sw = sw.hex()
         sw = int(sw, 16)
         if sw != wuparser.START_BYTE:
