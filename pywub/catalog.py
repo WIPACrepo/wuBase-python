@@ -19,7 +19,7 @@ class wubCMD_SERV(IntEnum):
 class wubCMD_RC(IntEnum):
     # Command response codes. 
     CMD_RC_OK = ord('a') #is a char because we can see it in the terminal directly. 
-    CMD_RC_INVALID_COUNT = auto()
+    CMD_RC_INVALID_ARGUMENT_COUNT = auto()
     CMD_RC_INVALID_COMMAND = auto()
     CMD_RC_INVALID_NUMBER = auto()
     CMD_RC_OUT_OF_RANGE = auto()
