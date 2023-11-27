@@ -1,4 +1,10 @@
 *.ipynb
-
+.vscode
+.eggs
 __pycache__/
 *.pyc
+build
+*.txt
+*.cmd_log
+*.pdf
+*.egg-info

@@ -1,12 +1,27 @@
 # wuBase-python
 
-Python driver for interacting with a wuBase.
+Python drivers for interacting with a wuBase.
 
-## Usage
+## Instantiation 
 
-### Instantiation 
+Begin by installing the required Python packages, followed by the package itself. 
 
+```
+cd wuBase-python
+pip install . 
+```
 
+## Data Acquisition
+
+### LOM-style MFH usage
+
+Some documentation will live here. [STM32Tools](https://github.com/WIPACrepo/STM32Tools) contains a LOM interface script which makes signfiicant usage of this module, so look over there. 
+
+### wuBase "D" module operation
+
+`run_wub_daq.py` is your go-to script (use the `--help` flag for information). It takes a configuration file (example given in `config/cfg_test_data.cfg`) which is a list of commands to execute before entering the batchmode reciever thread. 
+
+### More Involved Usage
 
 wubctl.py contains the main driver; instantiate it using
 
@@ -15,28 +30,20 @@ from pywub import wubctl
 wub = wubctl.wuBaseCtl(device_port, baudrate)
 ```
 
-The wuBase will operate in autobaud mode untill commanded not to using 
+Note the wuBase will operate in autobaud mode until told otherwise. This is handled seamlessly in the main DAQ script. 
 
-`wub.set_baud()` 
-
-which will set the baudrate on the wuBase to that of the serial port when the `wuBaseCtl` object was instantiated. 
-
-### Commanding
+#### Commanding
 
 The driver implements a method factory to generate commands for sending to the wubase. 
-`commands.py` contains a list of ASCII commands from which to generate the functions.
-Each method is defined as `cmd_<ascii_command>`, e.g. `cmd_status()`, `cmd_getuid()`, `cmd_start_pulser()`. 
+`wubase_commands.txt` contains a list of ASCII commands from which to generate the functions.
+Each method is defined as `cmd_<command name>`, e.g. `cmd_status()`, `cmd_getuid()`, `cmd_start_pulser()`. 
 
 Arguments can be passed to commands as strings or numbers:
 
-`wub.cmd_pulser_setup("2000", "0.3")`
-`wub.cmd_pulser_setup(2000, 0.3)`
-
-If you want to capture the output of commands to a file (rather than return a string with the response) you can pass any command the keyword argument `datafile=foo` where `foo` is an open file handler. 
-This is particularly useful for `cmd_send_batch()` where the number of returned data may be arbitrarily large. 
+`wub.cmd_pulser_setup("1", "2000", "0.3")`
+`wub.cmd_pulser_setup(1, 2000, 0.3)`
 
 
+#### Known Issues
 
-## Known Issues
-
-The code to capture wuBase responses is a little bit janky.
+Aborting a run in BINARY comms mode can be wonky if there are data in the buffer. As a result, the last frame captured may be incorrect. 

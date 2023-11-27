@@ -3,7 +3,8 @@
 import time
 import sys
 import threading
-import struct
+from collections import deque 
+
 
 from pywub.control import wubCTL as wubCTL
 from pywub.control import parse_config
@@ -22,11 +23,21 @@ def main(cli_args):
 
     wubctl = wubCTL(cli_args.port, baud=cli_args.baud, 
                     mode=cli_args.commsmode, timeout=cli_args.timeout, 
-                    verbosity=cli_args.verbose)
-    #wubctl = wubCTL(**cli_args.__dict__)
-    
+                    verbosity=cli_args.verbose,
+                    store_mode=cli_args.store_mode, 
+                    parity=cli_args.parity)
+
     config = parse_config(cli_args.config)
     setup_commands = config['setup']
+
+    #The following two commands override send_recv because of the way commsmode is set up.
+    # The device boots in autobaud mode and this doesn't work at higher baudrates, so:
+    logger.info("Setting wuBase baud rate to fixed...")
+    resp = wubctl.send_recv_ascii(wubCMD_catalog.baud, cli_args.baud)
+    logger.debug(f"Response: {resp['response']}")
+    #Check if the device was already in autobaud mode: 
+    if resp['response'][0] == '?':
+        logger.warning("Invalid command response; possibly the device was already in fixed baud mode. ")
     
     # The device boots in asciimode, so ensure that it is operating in the right mode: 
     if not wubctl.isascii:
@@ -48,32 +59,46 @@ def main(cli_args):
             cmd = wubCMD_catalog.get_command(setup_cmd_name)
             response = None
 
+            
+
             if setup_cmd_args is not None:
                 response = wubctl.send_recv(cmd, *setup_cmd_args)
             else:
                 response = wubctl.send_recv(cmd)
-
+           
             if wubctl.isascii:
-                logger.info(f"Command response:\n{response['response']}")
-                break
+                if response['response'][0] != '?':
+                    logger.info(f"Command response: {response['response']}")
+                    retries = 0
+                    break
+                else:
+                    logger.warning(f"Issue executing command. Retrying {retries+1}/10.")
+                    if retries > 10:
+                        logger.error(f"\tERROR: Number of retries exceeds threshold. Exiting...")
+                        error_detect = True
+                        break
+                    retries+=1
             else:
                 response = response['response'] #Strip out this layer.
                 logger.info(f"CMD_RC: {wubCMD_RC(response['CMD_RC']).name}")
 
                 if response['CMD_RC'] == wubCMD_RC.CMD_RC_OK:
-                    logger.info(f"CMD_retargs: {response['retargs']}")        
+                    logger.info(f"CMD_retargs: {response['retargs']}")       
+                    retries = 0 
                     break
                 else:
                     logger.warning(f"Issue executing command. Retrying {retries+1}/10.")
-                    if retries > 0:
+                    if retries > 10:
                         logger.error(f"\tERROR: Number of retries exceeds threshold. Exiting...")
                         error_detect = True
                         break
                     retries+=1
+                
+            time.sleep(float(sleeptime))
 
-        time.sleep(float(sleeptime))
+        
         print("-----------------------------------------")    
-    
+
     output_handler = None
     if cli_args.ofile is not None:
         logger.info(f"Opening {cli_args.ofile} for data logging.")
@@ -82,14 +107,16 @@ def main(cli_args):
         else: 
             output_handler = open(cli_args.ofile, "wb")
     # Now start the batchmode recieve thread. 
-    rx_thread=threading.Thread(target=wubctl.batchmode_recv, args=(cli_args.ntosend, 0), kwargs=dict(datafile=output_handler))
+    rx_thread=threading.Thread(target=wubctl.batchmode_recv, args=(cli_args.ntosend, 1), kwargs=dict(datafile=output_handler))
 
     rx_thread.start()
 
+    bytes_tracker = deque(['0','0','0'], maxlen=3)
     maxruntime = cli_args.runtime    
     tlast = time.time()
     tstart = time.time()
     
+
     try:
         while True:            
             tnow = time.time()
@@ -98,7 +125,20 @@ def main(cli_args):
                 if not wubctl._batch_mode_running:
                     logger.info("End of batch data readout. Exiting.")
                     break
-                logger.info(f"Progress: {wubctl.nbytes_recv:8.2e} bytes")
+
+                if wubctl.isascii:
+                    info_str = f"Progress: {wubctl.nbytes_recv:8.4e} bytes"
+                else:
+                    #{wubctl.nframes_binary} frames 
+                    info_str = f"Progress: {wubctl.nbytes_recv:8.4e} bytes -- bytes in_waiting: {wubctl.bytes_in_waiting}"
+
+                    
+                bytes_tracker.append(wubctl.nbytes_recv)
+                logger.info(info_str)
+                
+                if(len(set(bytes_tracker)) == 1):
+                    logger.warning("No new data in the last second.")
+
             if maxruntime > 0 and tnow - tstart > maxruntime:
                 logger.info("DAQ runtime exceeded... Exiting.")
                 wubctl.request_stop = True          
@@ -116,10 +156,22 @@ def main(cli_args):
         logger.error(f"Rx thread failed to complete!")
 
     if not wubctl.isascii:
+        logger.info(wubctl.cmd_ok())
+
+        logger.info("Getting binary stats from wuBase.")
+        resp = wubctl.cmd_binary_stats();
+        
+        rc = wubCMD_RC(resp['response']['CMD_RC']).name
+        nhits_tx =  int(resp['response']['retargs'][0])
+        nbytes_tx =  int(resp['response']['retargs'][1])
+        logger.info(f"Hits transmitted by wuBase:  {nhits_tx} (0x{nhits_tx:X})")
+        logger.info(f"Bytes transmitted by wuBase: {nbytes_tx} (0x{nbytes_tx:X})")
+
         logger.info("Sending ASCIIMODE command to wuBase.")        
         #logger.debug(wubctl.cmd_ok())
         resp = wubctl.cmd_asciimode()
-        logger.info(resp['response'])
+        rc = wubCMD_RC(resp['response']['CMD_RC']).name
+        logger.info(rc)
         
 
     logger.info("Re-enabling autobaud.")    
@@ -128,6 +180,7 @@ def main(cli_args):
     logger.info(resp['response'])
 
     if output_handler is not None: 
+        output_handler.flush()
         output_handler.close()
     logger.info("Exiting....")    
 
@@ -175,15 +228,31 @@ if __name__ == "__main__":
 
     parser.add_argument("--ntosend", type=int, default=-1,
                         help="Number of hits to send in batchmode. Negative means send all available.")
+    
+    parser.add_argument("--store_mode", type=str, default='bulk', 
+                        help="Choose which method of recieving and processing hits.")
+    
+    parser.add_argument("--debug", action='store_true',
+                        help="Override loglevel to debug")
+    
+    parser.add_argument("--parity", action='store_true',
+                    help="Set serial interface to use positive parity bit")    
 
     
+
     
     cli_args = parser.parse_args()  
+
+    if cli_args.debug: 
+        cli_args.loglevel = "debug"
+
     numeric_level = getattr(logging, cli_args.loglevel.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % cli_args.loglevel)
      
+    
     logger.setLevel(cli_args.loglevel.upper())
+
     ch = logging.StreamHandler()
     format_stream = "%(asctime)s - %(levelname)s - %(name)s - %(funcName)s - %(message)s" #"%(asctime)s - %(name)s %(funcName)s():%(lineno)d\t%(message)s"
     #ch.setFormatter(CustomFormatter(format_stream))
@@ -216,9 +285,11 @@ if __name__ == "__main__":
     field_styles=FIELD_STYLES,
     )
 
-    #logger.addHandler(ch)
-
-
+    if cli_args.ofile is not None:        
+        fh = logging.FileHandler(cli_args.ofile + '.cmd_log')
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(logging.Formatter(format_stream))
+        logger.addHandler(fh)
     
     main(cli_args)
     

@@ -1,7 +1,7 @@
-from enum import Enum, IntEnum, auto
+from enum import IntEnum, auto
 import struct
 import os
-
+from cobs import cobs
 
 
 # try:
@@ -19,7 +19,7 @@ class wubCMD_SERV(IntEnum):
 class wubCMD_RC(IntEnum):
     # Command response codes. 
     CMD_RC_OK = ord('a') #is a char because we can see it in the terminal directly. 
-    CMD_RC_INVALID_COUNT = auto()
+    CMD_RC_INVALID_ARGUMENT_COUNT = auto()
     CMD_RC_INVALID_COMMAND = auto()
     CMD_RC_INVALID_NUMBER = auto()
     CMD_RC_OUT_OF_RANGE = auto()
@@ -54,7 +54,11 @@ class wubCMD_entry():
         
         #Parse messy strings. 
         self.args = args.replace('"', '').strip(' ')
-        self.retargs = retargs.replace('"', '').strip(' ')        
+        self.retargs = retargs.replace('"', '').strip(' ')
+
+        #Fix the VERSION command format string:
+        if self.cmd_name.lower() == "cmd_version":
+            self.retargs = "30sb30sb"
         
     def __repr__(self):
         return f"ID: {hex(self.cmd_id)}\tCMD_NAME: {self.cmd_name:20s}\
@@ -68,7 +72,7 @@ class wubCMD_entry():
             *args: Variable length argument list to pass along with command. 
             
         Returns:
-            bytes: formatted command object.
+            bytes: formatted command object with delimeter. 
         
         '''
         command_str = ''
@@ -82,15 +86,22 @@ class wubCMD_entry():
                     arg_str += f" {args[i]}"
 
             build = (command_str + arg_str.format(*args)).encode('utf-8')
+
+            #Add delimieter
+            return build + bytes('\r\n', 'utf-8')
             
         else: #Binary
             
             command_str = struct.pack(f"!HH", 0, self.cmd_id) 
             arg_str = struct.pack(f"!{self.args}", *args)
             #print(self.args)
-            build = command_str + arg_str 
+            build = command_str + arg_str
+
+            build = cobs.encode(build) + bytearray([0])
+
+            return build
             
-        return build + bytes('\r\n', 'utf-8')
+        
 
     
 class wubCMD_catalog():
@@ -117,7 +128,7 @@ class wubCMD_catalog():
         self.reference = 'name'
         self._dict = self.name_dict
 
-    def get_command(self, name:wubCMD_entry):
+    def get_command(self, name:str) -> wubCMD_entry:
         return getattr(self, f"{name.lower()}")
         
     def set_reference(self, ref:str):
@@ -146,12 +157,11 @@ command_set = []
 command_names = []
 
 this_dir, this_filename = os.path.split(__file__)
-data_file = os.path.join(this_dir, "command_subset-csv.txt")
+data_file = os.path.join(this_dir, "wubase_commands.txt")
 
 with open(data_file , 'r') as f:
     for line in f.readlines():
         cmd_dict = line.rstrip()[1:-2].split(",")
-        #print(cmd_dict)
         command_set += [wubCMD_entry(*cmd_dict)]
         command_names += [cmd_dict[0].strip('\"')]
         
