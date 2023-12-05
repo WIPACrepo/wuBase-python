@@ -4,11 +4,46 @@ import os
 from cobs import cobs
 
 
-# try:
-#     import importlib.resources as pkg_resources
-# except ImportError:
-#     # Try backported to PY<37 `importlib_resources`.
-#     import importlib_resources as pkg_resources
+def parse_setup_config(filename:str):
+
+    with open(filename, 'r') as f:
+        config = f.read()
+
+    setup_command_list = []
+    for setting in config.split("\n"):
+
+        if len(setting) > 0 and setting[0] != '#':
+            spl = setting.split(" ")
+            
+            for s in spl:
+                s.strip()
+
+            mask = None 
+            if setting[0].isnumeric():
+                offset = 1
+                mask = int(spl[0], 16)
+            else: 
+                offset = 0
+
+            command = spl[0 + offset]
+            sleeptime = spl[1 + offset]
+            modified_command_args = None
+            
+            if len(spl) > 2: 
+                command_args = spl[(2 + offset)::]
+                modified_command_args = []
+                for arg in command_args:
+                    if arg.isnumeric():
+                        modified_command_args += [int(arg)]
+                    else:
+                        modified_command_args += [float(arg)]
+
+            cmd_line = dict(name=command, sleeptime=sleeptime, args=modified_command_args, mask=mask)
+            setup_command_list += [cmd_line]
+        else:
+            continue
+        
+    return dict(setup=setup_command_list)    
     
     
 #Helper classes
