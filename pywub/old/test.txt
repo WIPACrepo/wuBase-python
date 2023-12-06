@@ -1,4 +1,0 @@
-Ubaud 1181818
-Processing ASCII command.
-?INVALID COMMAND
-status
