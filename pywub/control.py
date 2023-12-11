@@ -65,68 +65,7 @@ class InvalidCommandException(Exception):
     """Raised when an invalid command is sent to the wuBase."""
     pass
 
-def parse_config(filename:str):
-    #YAML version -- Does not work if you are executing multiple commands of the same type! 
-    # config = {}
-    # with open(filename, 'r') as stream:
-    #     try:
-    #         # Converts yaml document to python object
-    #         config=yaml.safe_load(stream)
-
-    #     except yaml.YAMLError as e:
-    #         logger.error(f"Error parsing config file {filename}.")
-    #         raise yaml.YAMLError
-        
-    # logger.debug(f"Parsed config: {config}")
-    
-    # return config
-
-    with open(filename, 'r') as f:
-        config = f.read()
-
-    setup_command_list = []
-    for setting in config.split("\n"):
-        # #Go ahead and check the format by looking at the record length.
-        # if len(setting) == 3:
-        #     offset = 0
-        # else:
-        #     offset = 1
-
-#        print("Setting:", setting, len(setting))
-
-        if len(setting) > 0 and setting[0] != '#':
-            spl = setting.split(" ")
-            
-            for s in spl:
-                s.strip()
-
-            mask = None 
-            if setting[0].isnumeric():
-                offset = 1
-                mask = spl[0]
-            else: 
-                offset = 0
-
-            command = spl[0 + offset]
-            sleeptime = spl[1 + offset]
-            modified_command_args = None
-            
-            if len(spl) > 2: 
-                command_args = spl[(2 + offset)::]
-                modified_command_args = []
-                for arg in command_args:
-                    if arg.isnumeric():
-                        modified_command_args += [int(arg)]
-                    else:
-                        modified_command_args += [float(arg)]
-
-            cmd_line = dict(name=command, sleeptime=sleeptime, args=modified_command_args, mask=mask)
-            setup_command_list += [cmd_line]
-        else:
-            continue
-        
-    return dict(setup=setup_command_list)    
-    
+   
 
 
 class wubCTL():

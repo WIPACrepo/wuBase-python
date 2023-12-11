@@ -7,24 +7,22 @@ if sys.version_info < (3, 8):
     extra_deps = [
         "numpy==1.21",
         "pytest==7.1.2",
-        "matplotlib==3.5",
         "setuptools_scm==6.3.2",
     ]
 elif sys.version_info[:2] == (3, 8):
     extra_deps = [
         "numpy==1.24",
         "pytest==7.3.1",
-        "matplotlib==3.5",
         "setuptools_scm==6.3.2",
     ]
 else:
     # Use newer Numpy:
-    extra_deps = ["numpy==1.26.1", "pytest==7.3.1", "matplotlib"]
+    extra_deps = ["numpy==1.26.1", "pytest==7.3.1"]
 
 setup(
     name="pywub",
-    version="2.1",
+    version="2.2",
     packages=["pywub"],
     package_data={"pywub": ["wubase_commands.txt"]},
-    install_requires=["wheel", "coloredlogs>=15.0", "numpy", "pyserial"] + extra_deps,
+    install_requires=["wheel", "numpy", "pyserial"] + extra_deps,
 )

@@ -7,12 +7,11 @@ from collections import deque
 
 
 from pywub.control import wubCTL as wubCTL
-from pywub.control import parse_config
+from pywub.catalog import parse_setup_config
 from pywub.catalog import ctlg as wubCMD_catalog
 from pywub.catalog import wubCMD_RC
 
 import logging 
-import coloredlogs
 
 
 logger = logging.getLogger()
@@ -27,7 +26,7 @@ def main(cli_args):
                     store_mode=cli_args.store_mode, 
                     parity=cli_args.parity)
 
-    config = parse_config(cli_args.config)
+    config = parse_setup_config(cli_args.config)
     setup_commands = config['setup']
 
     #The following two commands override send_recv because of the way commsmode is set up.
@@ -239,7 +238,7 @@ if __name__ == "__main__":
                     help="Set serial interface to use positive parity bit")    
 
     
-
+    LOGGING_STREAM_FORMAT = "%(asctime)s - %(levelname)s - %(name)s - %(funcName)s - %(message)s"
     
     cli_args = parser.parse_args()  
 
@@ -250,7 +249,7 @@ if __name__ == "__main__":
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % cli_args.loglevel)
      
-    
+    loglevel = cli_args.loglevel.upper()
     logger.setLevel(cli_args.loglevel.upper())
 
     ch = logging.StreamHandler()
@@ -277,13 +276,27 @@ if __name__ == "__main__":
         error=dict(color='red'),
         critical=dict(color='red')
     )    
-    coloredlogs.install(
-    level=cli_args.loglevel.upper(),
-    fmt="[%(asctime)s] - [%(levelname)s] - %(name)s [%(funcName)s:%(lineno)d] - %(message)s",
-    datefmt="%H:%M:%S",
-    level_styles=LEVEL_STYLES,
-    field_styles=FIELD_STYLES,
-    )
+
+    try: 
+        import coloredlogs
+
+        coloredlogs.install(
+        level=cli_args.loglevel.upper(),
+        fmt=LOGGING_STREAM_FORMAT,
+        datefmt="%H:%M:%S",
+        level_styles=LEVEL_STYLES,
+        field_styles=FIELD_STYLES,
+        )
+
+    except ImportError: 
+        print("coloredlogs not found; using default logging in stead.")
+      
+        ch = logging.StreamHandler()
+        ch.setLevel(loglevel.upper())
+        formatter = logging.Formatter(LOGGING_STREAM_FORMAT, datefmt="%H:%M:%S")
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)   
+
 
     if cli_args.ofile is not None:        
         fh = logging.FileHandler(cli_args.ofile + '.cmd_log')
