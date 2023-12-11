@@ -120,10 +120,9 @@ class wubCMD_entry():
                 for i, fmt in enumerate(self.args):
                     arg_str += f" {args[i]}"
 
-            build = (command_str + arg_str.format(*args)).encode('utf-8')
+            build = (command_str + arg_str.format(*args))
 
-            #Add delimieter
-            return build + bytes('\r\n', 'utf-8')
+            return build 
             
         else: #Binary
             
@@ -132,7 +131,7 @@ class wubCMD_entry():
             #print(self.args)
             build = command_str + arg_str
 
-            build = cobs.encode(build) + bytearray([0])
+            build = cobs.encode(build)
 
             return build
             
