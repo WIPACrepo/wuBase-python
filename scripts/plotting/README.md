@@ -1,5 +1,5 @@
 # wuBase-python Plotting
 
-An additional requirement is required for these scripts and is not part of the main `pyWub` install.
+Some of these scripts have dependenceies that are not part of the main `wuBase-python` install.
 
 ```pip install matplotlib```
