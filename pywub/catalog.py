@@ -3,6 +3,7 @@ import struct
 import os
 from cobs import cobs
 
+from dataclasses import dataclass
 
 def parse_setup_config(filename:str):
 
@@ -96,15 +97,15 @@ class wubCMD_entry():
             self.retargs = "30sb30sb"
         
     def __repr__(self):
-        return f"ID: {hex(self.cmd_id)}\tCMD_NAME: {self.cmd_name:20s}\
-                \tARGS: {self.args:5s}\tRETARGS: {self.retargs if len(self.retargs) > 0 else None}"
+        return f"ID: {hex(self.cmd_id)} CMD_NAME: {self.cmd_name:25s} \
+                ARGS: {self.args if len(self.args) > 0 else None} RETARGS: {self.retargs if len(self.retargs) > 0 else None}"
     
-    def build(self, mode : str = 'b', *args) -> bytes:
+    def build(self, mode : str = 'b', args: list = []) -> bytes:
         '''Build a bytes object from a wubCMD and related arguments. 
         
         Args:
             mode (str): comms mode (ascii || binary)
-            *args: Variable length argument list to pass along with command. 
+            args (list): Variable length argument list to pass along with command. 
             
         Returns:
             bytes: formatted command object with delimeter. 
@@ -115,7 +116,7 @@ class wubCMD_entry():
         build = None
         if(mode.upper()[0] == 'A'): #Covers 'ascii, a, ASCII, asc, etc.'
             command_str = f"{self.name.upper()}"
-            
+
             if self.args is not None:
                 for i, fmt in enumerate(self.args):
                     arg_str += f" {args[i]}"
@@ -135,14 +136,45 @@ class wubCMD_entry():
 
             return build
             
-        
+@dataclass
+class wubCMD_resp:
+    mask: int
+    cmd: wubCMD_entry
+    args: list = None
 
-    
+    #Binary
+    rc: wubCMD_RC = None
+    retargs: list = None
+
+    #ASCII 
+    retstr : str = ""
+
+    def __post_init__(self):
+        #Populate the return string if only binary data were produced.
+        if self.rc != None:
+            self.retstr = f"CMD_RC: {wubCMD_RC(self.rc).name}"
+            if self.retargs is not None and len(self.retargs) > 0:
+                self.retstr += f" RETARGS: {self.retargs}"
+
+@dataclass
+class wubCMD_ask:
+    cmd: wubCMD_entry
+    args: list = None
+
+
+@dataclass
+class wubCMD_multi_resp:
+    mask: int
+
+    rc: list[wubCMD_RC] 
+    retargs: list = None
+
+    return_str: list = None
 class wubCMD_catalog():
     
     _return_codes = wubCMD_RC
     
-    def __init__(self, cmd_list = []):
+    def __init__(self, cmd_list : list = []):
         
         #These are used as part of indexing.
         self.name_dict = {}
