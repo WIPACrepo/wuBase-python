@@ -1,9 +1,19 @@
+from __future__ import annotations
+
 from enum import IntEnum, auto
 import struct
 import os
 from cobs import cobs
 
 from dataclasses import dataclass
+
+def mask_to_base_numbers(bitmask: int) -> list[int]:
+    '''
+    Returns a list of length 18 (maximum number of bases).
+    The order is inverted -- flags[0] is the LSB in the bitmask 
+    '''
+    flags = list(f'{bitmask:018b}')[::-1]
+    return [int(index) for index,i in enumerate(flags) if int(i) == 1]
 
 def parse_setup_config(filename:str):
 
@@ -138,7 +148,7 @@ class wubCMD_entry():
             
 @dataclass
 class wubCMD_resp:
-    mask: int
+    base: int
     cmd: wubCMD_entry
     args: list = None
 
@@ -161,15 +171,34 @@ class wubCMD_ask:
     cmd: wubCMD_entry
     args: list = None
 
-
 @dataclass
-class wubCMD_multi_resp:
+class wubCMD_mask_ask:
     mask: int
+    cmd: wubCMD_entry
+    args: list = None
 
-    rc: list[wubCMD_RC] 
-    retargs: list = None
+@dataclass(init = False)
+class wubCMD_mask_resp:
+    mask: int
+    resp: list[wubCMD_resp]
 
-    return_str: list = None
+    def __init__(self, mask:int, resp: list[wubCMD_resp]):
+        self.mask = mask
+        self.resp = resp
+
+        cmd_rc = []
+        cmd_retargs = []
+        bases = mask_to_base_numbers(self.mask)
+        for index, base in enumerate(bases):
+            cmd_rc += [self.resp[index].rc]
+            cmd_retargs += [self.resp[index].retargs]
+
+        self.rc = cmd_rc
+        self.retargs = cmd_retargs
+
+
+
+
 class wubCMD_catalog():
     
     _return_codes = wubCMD_RC
