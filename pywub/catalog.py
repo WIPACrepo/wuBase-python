@@ -190,8 +190,17 @@ class wubCMD_mask_resp:
         cmd_retargs = []
         bases = mask_to_base_numbers(self.mask)
         for index, base in enumerate(bases):
-            cmd_rc += [self.resp[index].rc]
-            cmd_retargs += [self.resp[index].retargs]
+            base_resp = self.resp[index]
+
+            cmd_rc += [base_resp.rc]
+
+            if len(base_resp.cmd.retargs) > 0: 
+                if base_resp.retargs is not None and len(base_resp.retargs) > 0:
+                    cmd_retargs += [base_resp.retargs]
+                else: 
+                    cmd_retargs += [None]
+            else:
+                cmd_retargs = None
 
         self.rc = cmd_rc
         self.retargs = cmd_retargs
