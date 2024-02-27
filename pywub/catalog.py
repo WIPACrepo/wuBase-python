@@ -30,10 +30,10 @@ def parse_setup_config(filename:str):
                 s.strip()
 
             mask = None 
-            if setting[0].isnumeric():
-                offset = 1
+            try: 
                 mask = int(spl[0], 16)
-            else: 
+                offset = 1
+            except ValueError:
                 offset = 0
 
             command = spl[0 + offset]
