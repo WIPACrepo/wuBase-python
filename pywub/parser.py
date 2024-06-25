@@ -1,4 +1,7 @@
 import struct
+from typing import Any
+
+#FIXME: Applies only to MPEs as it stands... 
 
 START_BYTE = 0x21
 
@@ -16,14 +19,14 @@ ADC_DATA_OFFSET   = FPGA_TDC_OFFSET   + FPGA_TDC_WIDTH
 
 HEADER_SIZE = NSAMPLES_WIDTH + HIT_NUMBER_WIDTH + FPGA_TS_WIDTH + FPGA_TDC_WIDTH
 
-def unpack_nsamples(d):
+def unpack_nsamples(d: bytes) -> int:
 
     if NSAMPLES_WIDTH == 2:
         return struct.unpack("<H", d)[0]
     else:
         return struct.unpack("<B", d)[0]
 
-def unpack_header(header):
+def unpack_header(header: bytes) -> tuple[Any, ...]:
     
     header = bytearray(header)
     
@@ -41,13 +44,13 @@ def unpack_header(header):
     
     return struct.unpack(fmt, header)
     
-def unpack_payload(payload):
+def unpack_payload(payload: bytes) -> tuple[Any, ...]:
     unpack_fmt = "<" + "".join(["H" for s in range(int(len(payload)/2))])
     return struct.unpack(unpack_fmt, payload)
 
-def calc_frame_size(nsamples):
-    return NSAMPLES_WIDTH + HIT_NUMBER_WIDTH + FPGA_TS_WIDTH + FPGA_TDC_WIDTH + 2*2*nsamples
-
-def calc_payload_size(nsamples):
+def calc_payload_size(nsamples: int) -> int:
     return 2*2*nsamples
+
+def calc_frame_size(nsamples: int) -> int:
+    return NSAMPLES_WIDTH + HIT_NUMBER_WIDTH + FPGA_TS_WIDTH + FPGA_TDC_WIDTH + calc_payload_size(nsamples)
 
