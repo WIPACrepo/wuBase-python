@@ -137,8 +137,8 @@ class wubCMD_entry():
             
         else: #Binary
             
-            command_str = struct.pack(f"!HH", 0, self.cmd_id) 
-            arg_str = struct.pack(f"!{self.args}", *args)
+            command_str = struct.pack("!HH", 0, self.cmd_id) 
+            arg_str = struct.pack("!{self.args}", *args)
             #print(self.args)
             build = command_str + arg_str
 
@@ -161,7 +161,7 @@ class wubCMD_resp:
 
     def __post_init__(self):
         #Populate the return string if only binary data were produced.
-        if self.rc != None:
+        if self.rc is not None:
             self.retstr = f"CMD_RC: {wubCMD_RC(self.rc).name}"
             if self.retargs is not None and len(self.retargs) > 0:
                 self.retstr += f" RETARGS: {self.retargs}"

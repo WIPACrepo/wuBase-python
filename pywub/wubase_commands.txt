@@ -19,7 +19,7 @@
 {"QUICKSCANRANGE",       SERV_SLOW_CTRL, CMD_QUICKSCANRANGE       , "II", ""},
 {"SCANSTOPFRAC",         SERV_SLOW_CTRL, CMD_SCANSTOPFRAC         , "d", ""},
 {"SCANSTOPDROP",         SERV_SLOW_CTRL, CMD_SCANSTOPDROP         , "d", ""},
-{"SCANPRINT",            SERV_SLOW_CTRL, CMD_SCANPRINT            , "", ""},
+{"SCANPRINT",            SERV_SLOW_CTRL, CMD_SCANPRINT            , "", "bdbdbdbdbd"},
 {"SCANABORT",            SERV_SLOW_CTRL, CMD_SCANABORT            , "", ""},
 {"SCANSTATUS",           SERV_SLOW_CTRL, CMD_SCANSTATUS           , "", "B"},
 {"CAL10",                SERV_SLOW_CTRL, CMD_CAL10                , "dd", ""},
