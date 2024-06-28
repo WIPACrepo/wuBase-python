@@ -75,6 +75,8 @@ class wubCMD_RC(IntEnum):
     CMD_RC_BADCRC = auto()
     CMD_RC_INVALID_UNPACK = auto()
     CMD_RC_WAITING = auto()
+    CMD_RC_RESP_TIMEOUT = auto()
+    CMD_RC_INVALID = auto()
 
     
 class wubCMD_entry():
