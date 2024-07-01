@@ -8,3 +8,4 @@ build
 *.cmd_log
 *.pdf
 *.egg-info
+dist/
