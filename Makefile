@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 PYTHON := python    # parent project can override setup python
-CLEAN := pywub.egg-info dist
+CLEAN := pywub.egg-info dist build
 PHONY =
 
 help:
