@@ -1,3 +1,5 @@
+from __future__ import annotations  # Reminder: May be removed after Python 3.9 is EOL.
+
 from dataclasses import dataclass
 
 @dataclass
