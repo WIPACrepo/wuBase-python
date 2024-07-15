@@ -21,8 +21,10 @@ def parse_setup_config(filename:str = None, config:list[str] = None):
         with open(filename, 'r') as f:
             config = f.read()
 
+            config = config.split("\n")
+
     setup_command_list = []
-    for setting in config.split("\n"):
+    for setting in config:
 
         if len(setting) > 0 and setting[0] != '#':
             spl = setting.split(" ")
