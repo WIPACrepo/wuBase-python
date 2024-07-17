@@ -15,13 +15,16 @@ def mask_to_base_numbers(bitmask: int) -> list[int]:
     flags = list(f'{bitmask:018b}')[::-1]
     return [int(index) for index,i in enumerate(flags) if int(i) == 1]
 
-def parse_setup_config(filename:str):
+def parse_setup_config(filename:str = None, config:list[str] = None):
 
-    with open(filename, 'r') as f:
-        config = f.read()
+    if filename is not None: 
+        with open(filename, 'r') as f:
+            config = f.read()
+
+            config = config.split("\n")
 
     setup_command_list = []
-    for setting in config.split("\n"):
+    for setting in config:
 
         if len(setting) > 0 and setting[0] != '#':
             spl = setting.split(" ")
