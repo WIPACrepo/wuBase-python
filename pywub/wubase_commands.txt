@@ -87,3 +87,5 @@
 {"TESTPACKETS",          SERV_SLOW_CTRL, CMD_TESTPACKETS          , "bI", ""},
 {"INFINITEPACKETS",      SERV_SLOW_CTRL, CMD_INFINITEPACKETS      , "", ""},
 {"VERSION",              SERV_SLOW_CTRL, CMD_VERSION              , "", "sbsb"},
+{"ECHO_PACKET",          SERV_SLOW_CTRL, CMD_ECHO_PACKET          , "I", "II"},
+{"ECHO_PACKET_RESET",    SERV_SLOW_CTRL, CMD_ECHO_PACKET_RESET    , "", ""},
