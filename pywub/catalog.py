@@ -15,6 +15,10 @@ def mask_to_base_numbers(bitmask: int) -> list[int]:
     flags = list(f'{bitmask:018b}')[::-1]
     return [int(index) for index,i in enumerate(flags) if int(i) == 1]
 
+def update_setup_commands(mask:int, setup_commands:list[str]) -> list[str]:
+    return [command.replace("MASK", f"{mask:X}") for command in setup_commands]
+    
+
 def parse_setup_config(filename:str = None, config:list[str] = None):
 
     if filename is not None: 
