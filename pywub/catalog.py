@@ -171,7 +171,7 @@ class wubCMD_resp:
     def __post_init__(self):
         #Populate the return string if only binary data were produced.
         if self.rc is not None:
-            self.retstr = f"CMD_RC: {wubCMD_RC(self.rc).name}"
+            self.retstr = f"{wubCMD_RC(self.rc).name}"
             if self.retargs is not None and len(self.retargs) > 0:
                 self.retstr += f" RETARGS: {self.retargs}"
 
@@ -186,11 +186,12 @@ class wubCMD_mask_ask:
     cmd: wubCMD_entry
     args: list = None
 
+
 @dataclass(init = False)
 class wubCMD_mask_resp:
     mask: int
     resp: list[wubCMD_resp]
-
+    
     def __init__(self, mask:int, resp: list[wubCMD_resp]):
         self.mask = mask
         self.resp = resp
@@ -213,8 +214,6 @@ class wubCMD_mask_resp:
 
         self.rc = cmd_rc
         self.retargs = cmd_retargs
-
-
 
 
 class wubCMD_catalog():
