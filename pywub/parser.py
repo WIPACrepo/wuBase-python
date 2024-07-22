@@ -56,7 +56,11 @@ def calc_payload_size(nsamples: int) -> int:
 def calc_frame_size(nsamples: int) -> int:
     return NSAMPLES_WIDTH + HIT_NUMBER_WIDTH + FPGA_TS_WIDTH + FPGA_TDC_WIDTH + calc_payload_size(nsamples)
 
-def parse_plot_hit(hit_data:bytearray) -> bool:
+# FIXME: Better error checking against the size of the array. 
+def parse_single_raw_hit(hit_data:bytearray) -> bool:
+        '''
+        Take a bytearray object and try to extract a hit from it.
+        '''
         nbytes_read = 0    
         sw = hit_data[0:START_BYTE_WIDTH]
     
@@ -68,6 +72,7 @@ def parse_plot_hit(hit_data:bytearray) -> bool:
         
         nbytes_read += START_BYTE_WIDTH
         
+        #FIXME: Check lengths.
         hdr = hit_data[nbytes_read:nbytes_read+HEADER_SIZE]
         
         nbytes_read += len(hdr)
