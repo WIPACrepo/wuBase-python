@@ -6,7 +6,7 @@ from setuptools import setup
 if sys.version_info < (3, 8):
     extra_deps = [
         "numpy==1.21",
-        "pytest==7.1.2",
+        "pytest<7.0.0",
         "setuptools_scm==6.3.2",
     ]
 elif sys.version_info[:2] == (3, 8):
