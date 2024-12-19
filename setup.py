@@ -17,7 +17,7 @@ elif sys.version_info[:2] == (3, 8):
     ]
 else:
     # Use newer Numpy:
-    extra_deps = ["numpy==1.26.1", "pytest==7.3.1"]
+    extra_deps = ["numpy", "pytest==7.3.1"]
 
 setup(
     name="pywub",
