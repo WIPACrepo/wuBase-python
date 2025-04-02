@@ -5,5 +5,5 @@ setup(
     version="3.1",
     packages=["pywub"],
     package_data={"pywub": ["wubase_commands.txt"]},
-    install_requires=["wheel", "numpy", "pyserial", "cobs"],
+    install_requires=["pyserial", "cobs"],
 )
