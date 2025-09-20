@@ -87,6 +87,8 @@
 {"TESTPACKETS",          SERV_SLOW_CTRL, CMD_TESTPACKETS          , "bI", ""},
 {"INFINITEPACKETS",      SERV_SLOW_CTRL, CMD_INFINITEPACKETS      , "", ""},
 {"VERSION",              SERV_SLOW_CTRL, CMD_VERSION              , "", "sbsb"},
+{"HIT_MODE",             SERV_SLOW_CTRL, CMD_HIT_MODE             , "I", ""},
+{"AVG_HIT_INIT",         SERV_SLOW_CTRL, CMD_AVG_HIT_INIT         , "I", ""},
 {"ECHO_PACKET",          SERV_SLOW_CTRL, CMD_ECHO_PACKET          , "B", "BHHH"},
 {"ECHO_PACKET_RESET",    SERV_SLOW_CTRL, CMD_ECHO_PACKET_RESET    , "", ""},
 {"GET_UART_LOG",         SERV_SLOW_CTRL, CMD_UART_LOG             , "", "IIHHHHH"},
